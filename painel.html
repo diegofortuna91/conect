@@ -1404,11 +1404,285 @@ function aplicarSessao(u){
       + `<small style="display:block;font-size:10px;opacity:.75;font-weight:600">${PERFIS[u.perfil]?PERFIS[u.perfil].nome:''}</small>`;
   }
 }
+/* =====================================================================
+   BASE DE DADOS NA NUVEM — Firebase (Firestore + Autenticação)
+   Projeto: service-conect · dados hospedados em São Paulo (southamerica-east1)
+
+   Como funciona:
+   • o efetivo vive em /efetivo/{matrícula}. Ao entrar, o app lê o próprio
+     cadastro e traz nome, função e O.S — nada de anexar arquivo no aparelho;
+   • as auditorias vão para /auditorias/{id} e as fotos em uma subcoleção,
+     para não estourar o limite de 1 MB por documento;
+   • sem sinal, o Firestore guarda no aparelho e envia sozinho quando voltar;
+   • se a nuvem não responder, o aplicativo continua funcionando no modo local.
+   ===================================================================== */
+const FB_CFG = {
+  apiKey: "AIzaSyA2lb0KrcskX7feyH3eHxJ5FrMlZa5Di_Y",
+  authDomain: "service-conect-f075c.firebaseapp.com",
+  projectId: "service-conect-f075c",
+  storageBucket: "service-conect-f075c.firebasestorage.app",
+  messagingSenderId: "1006181529816",
+  appId: "1:1006181529816:web:70fda769d5bdae5d58bfad"
+};
+const FB_VER = '10.14.1';
+const FB_SDK = ['app', 'auth', 'firestore'].map(m =>
+  `https://www.gstatic.com/firebasejs/${FB_VER}/firebase-${m}-compat.js`);
+const DOMINIO_LOGIN = '@conect.service';
+
+let FS = null;                                   // instância do Firestore
+const NUVEM = {pronta:false, tentou:false, online:false, erro:'', usuario:null};
+
+function emailDaMatricula(mat){
+  return String(mat||'').replace(/\D/g,'') + DOMINIO_LOGIN;
+}
+function carregarSDK(){
+  return new Promise(resolve => {
+    if(window.firebase && firebase.firestore) return resolve(true);
+    let i = 0;
+    const proximo = () => {
+      if(i >= FB_SDK.length) return resolve(!!(window.firebase && firebase.firestore));
+      const s = document.createElement('script');
+      s.src = FB_SDK[i++]; s.async = false;
+      s.onload = proximo;
+      s.onerror = () => resolve(false);
+      document.head.appendChild(s);
+    };
+    proximo();
+  });
+}
+async function iniciarNuvem(){
+  if(NUVEM.tentou) return NUVEM.pronta;
+  NUVEM.tentou = true;
+  try{
+    const ok = await carregarSDK();
+    if(!ok){ NUVEM.erro = 'Biblioteca da nuvem não carregou'; return false; }
+    if(!firebase.apps.length) firebase.initializeApp(FB_CFG);
+    FS = firebase.firestore();
+    try{ await FS.enablePersistence({synchronizeTabs:true}); }catch(e){ /* outra aba já ativou */ }
+    NUVEM.pronta = true;
+    NUVEM.online = navigator.onLine;
+    firebase.auth().onAuthStateChanged(u => { NUVEM.usuario = u || null; });
+    return true;
+  }catch(e){
+    NUVEM.erro = e.message || String(e);
+    return false;
+  }
+}
+/* espera a sessão salva ser restaurada (funciona offline, o Firebase guarda no aparelho) */
+function sessaoNuvem(){
+  return new Promise(resolve => {
+    if(!NUVEM.pronta) return resolve(null);
+    const fim = firebase.auth().onAuthStateChanged(u => { fim(); resolve(u || null); });
+  });
+}
+async function entrarNaNuvem(mat, senha){
+  if(!NUVEM.pronta) throw {code:'sem-nuvem'};
+  const cred = await firebase.auth().signInWithEmailAndPassword(emailDaMatricula(mat), senha);
+  return cred.user;
+}
+async function meuCadastro(mat){
+  const d = await FS.collection('efetivo').doc(String(mat).replace(/\D/g,'')).get();
+  return d.exists ? d.data() : null;
+}
+function sairDaNuvem(){ try{ firebase.auth().signOut(); }catch(e){} }
+
+function msgErroLogin(e){
+  const c = (e && e.code) || '';
+  if(c.indexOf('wrong-password')>=0 || c.indexOf('invalid-credential')>=0)
+    return 'Senha inválida — a senha inicial é a própria matrícula.';
+  if(c.indexOf('user-not-found')>=0)
+    return 'Matrícula ainda não liberada pelo administrador.';
+  if(c.indexOf('too-many-requests')>=0)
+    return 'Muitas tentativas seguidas. Aguarde um minuto e tente de novo.';
+  if(c.indexOf('network')>=0 || c === 'sem-nuvem')
+    return 'Sem conexão com a base de dados.';
+  return 'Não foi possível entrar: ' + (e && (e.message || e.code) || 'erro desconhecido');
+}
+
+/* =====================================================================
+   PAINEL x BASE DE DADOS
+   O administrador importa a planilha uma vez: o efetivo vai para a base e
+   cada matrícula ganha acesso (senha inicial = a própria matrícula).
+   As auditorias chegam sozinhas do campo, em tempo real.
+   ===================================================================== */
+let NUVEM_OUVINDO = false;
+
+/* Primeiro acesso: a base ainda não tem ninguém. Cria o administrador do contrato. */
+function primeiroAcesso(mat, sen){
+  openModal('Primeiro acesso à base de dados', `
+    <div class="alert al-amber" style="margin-bottom:14px">🔑 <div>
+      A matrícula <b>${esc(mat)}</b> ainda não existe na base. Se este é o primeiro acesso do contrato,
+      podemos criá-la como <b>administrador</b> — quem importa o efetivo e libera os demais.</div></div>
+    <div style="font-size:13.5px;color:var(--slate);line-height:1.6">
+      A senha será a que você acabou de digitar. Guarde-a: é ela que abre o painel.
+      Depois de importar a planilha, todos os outros entram com <b>matrícula e senha iguais à matrícula</b>.</div>
+    <div style="display:flex;gap:9px;margin-top:16px">
+      <button class="btn btn-p" style="flex:1;justify-content:center"
+        onclick="criarAdministrador('${esc(mat)}','${esc(sen).replace(/'/g,"&#39;")}')">Criar administrador</button>
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+    </div>`);
+}
+async function criarAdministrador(mat, sen){
+  if(String(sen||'').length < 6){
+    toast('A senha do administrador precisa de pelo menos 6 caracteres'); return;
+  }
+  closeModal();
+  try{
+    await firebase.auth().createUserWithEmailAndPassword(emailDaMatricula(mat), sen);
+    const u = {mat, nome:'Administrador do contrato', perfil:'admin', os:'', funcao:'', implantacao:true, nuvem:true};
+    store.set('sms_usuario', JSON.stringify(u));
+    aplicarSessao(u); aoEntrar();
+    openModal('Administrador criado', `
+      <div class="alert al-green" style="margin-bottom:14px">✅ <div>Acesso de administrador criado para a
+        matrícula <b>${esc(mat)}</b>.</div></div>
+      <div style="font-size:13.5px;color:var(--slate);line-height:1.6">Próximo passo: abra <b>⚙ Efetivo</b> e
+        importe a planilha de Controle do Efetivo. O sistema grava todo mundo na base e libera o acesso de cada
+        matrícula automaticamente.</div>
+      <div style="display:flex;gap:9px;margin-top:14px">
+        <button class="btn btn-p" style="flex:1;justify-content:center"
+          onclick="closeModal();setVista('admin',document.getElementById('btnAdmin'));abrirImportEfetivo()">Importar o efetivo agora</button>
+        <button class="btn" onclick="closeModal()">Depois</button></div>`);
+  }catch(e){
+    toast(msgErroLogin(e));
+  }
+}
+async function baixarEfetivoNuvem(){
+  if(!NUVEM.pronta || !firebase.auth().currentUser) return;
+  try{
+    const q = await FS.collection('efetivo').get();
+    if(q.empty) return;
+    const l = []; q.forEach(d=> l.push(d.data()));
+    USUARIOS = l.sort((a,b)=>(a.nome||'').localeCompare(b.nome||'','pt'));
+    saveUsuarios(); atualizarContratos();
+    if(document.body.classList.contains('logged')) renderSMS();
+  }catch(e){}
+}
+async function gravarEfetivoNaNuvem(lista, aoAndar){
+  if(!NUVEM.pronta || !firebase.auth().currentUser) throw new Error('sem conexão com a base');
+  const N = 400; let feitos = 0;
+  for(let i=0; i<lista.length; i+=N){
+    const lote = FS.batch();
+    lista.slice(i, i+N).forEach(u=>{
+      const id = soDigitos(u.mat); if(!id) return;
+      lote.set(FS.collection('efetivo').doc(id), {
+        mat:u.mat, nome:u.nome, funcao:u.funcao||'', os:u.os||'', perfil:u.perfil,
+        perfilBase:u.perfilBase||u.perfil, ativo:!!u.ativo,
+        afastamentos:(u.afastamentos||[]).map(a=>({tipo:a.tipo, de:a.de, ate:a.ate})),
+        interinoDe:u.interinoDe||null, interinoAte:u.interinoAte||null, obs:u.obs||'',
+        atualizadoEm: firebase.firestore.FieldValue.serverTimestamp()
+      }, {merge:true});
+    });
+    await lote.commit();
+    feitos += Math.min(N, lista.length - i);
+    if(aoAndar) aoAndar(feitos, lista.length);
+  }
+  return feitos;
+}
+/* cria o acesso de cada pessoa numa instância separada, para não derrubar a sessão do admin */
+async function criarAcessos(lista, aoAndar){
+  const sec = firebase.apps.find(a=>a.name==='criador') || firebase.initializeApp(FB_CFG, 'criador');
+  const auth2 = sec.auth();
+  let criados = 0, existentes = 0, erros = 0, i = 0;
+  for(const u of lista){
+    const mat = soDigitos(u.mat); i++;
+    if(!mat){ erros++; continue; }
+    try{
+      await auth2.createUserWithEmailAndPassword(emailDaMatricula(mat), mat);
+      criados++;
+    }catch(e){
+      if(String(e.code||'').indexOf('email-already-in-use')>=0) existentes++; else erros++;
+    }
+    try{ await auth2.signOut(); }catch(e){}
+    if(aoAndar) aoAndar(i, lista.length, criados, existentes);
+  }
+  return {criados, existentes, erros};
+}
+async function fecharImplantacao(){
+  try{
+    await FS.collection('config').doc('instalado').set({
+      em: hojeISO(), por: (USUARIO&&USUARIO.nome)||'', mat: (USUARIO&&USUARIO.mat)||''
+    }, {merge:true});
+  }catch(e){}
+}
+async function subirAreasNuvem(){
+  if(!NUVEM.pronta || !firebase.auth().currentUser) return 0;
+  const N = 300; let n = 0;
+  for(let i=0; i<AREAS.length; i+=N){
+    const lote = FS.batch();
+    AREAS.slice(i, i+N).forEach((a,j)=>{
+      const id = 'a-' + (a.nome||('area'+(i+j))).toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,60);
+      lote.set(FS.collection('areas').doc(id), JSON.parse(JSON.stringify(a)), {merge:true});
+    });
+    await lote.commit(); n += Math.min(N, AREAS.length - i);
+  }
+  return n;
+}
+/* escuta as auditorias que chegam do campo */
+function ouvirAuditorias(){
+  if(NUVEM_OUVINDO || !NUVEM.pronta || !firebase.auth().currentUser) return;
+  NUVEM_OUVINDO = true;
+  FS.collection('auditorias').onSnapshot(q=>{
+    const nuvem = [];
+    q.forEach(d=>{ const r = d.data(); r.id = d.id; r.origem = 'campo'; r.sync = true; nuvem.push(r); });
+    const locais = DB.filter(r=>r.origem !== 'campo' && !nuvem.some(x=>x.id===r.id));
+    DB = [...nuvem, ...locais].sort((a,b)=> a.data<b.data?1:-1);
+    saveDB();
+    if(typeof renderSMS==='function' && document.body.classList.contains('logged')) renderSMS();
+  }, err=>{ NUVEM_OUVINDO = false; });
+}
+/* baixa as fotos de uma auditoria só quando o relatório é aberto */
+async function fotosDaNuvem(reg){
+  if(!NUVEM.pronta || !firebase.auth().currentUser || reg._fotosOk) return reg;
+  try{
+    const q = await FS.collection('auditorias').doc(reg.id).collection('fotos').get();
+    const nc = {}; const ev = [];
+    q.forEach(d=>{
+      const k = d.id, v = (d.data()||{}).d;
+      if(!v) return;
+      if(k === 'pt') reg.ptFoto = v;
+      else if(k.startsWith('ev')) ev.push(v);
+      else if(k.startsWith('nc')){ const n = k.slice(2).split('-')[0]; (nc[n] = nc[n]||[]).push(v); }
+    });
+    if(ev.length) reg.fotos = ev;
+    if(Object.keys(nc).length) reg.fotosNC = nc;
+    reg._fotosOk = true;
+  }catch(e){}
+  return reg;
+}
 function entrar(){
   const mat = ($('lgUser').value||'').trim(), sen = ($('lgPass').value||'').trim();
   if(!mat){ $('lgUser').focus(); toast('Informe a matrícula'); return; }
   if(!sen){ $('lgPass').focus(); toast('Informe a senha'); return; }
+  entrarAsync(mat, sen);
+}
+async function entrarAsync(mat, sen){
   let u;
+  if(await iniciarNuvem()){
+    try{
+      await entrarNaNuvem(mat, sen);
+      const c = await meuCadastro(mat);
+      if(c){
+        if(!c.ativo){ toast('Colaborador inativo no controle de efetivo'); sairDaNuvem(); return; }
+        if(!PERFIS[c.perfil] || !PERFIS[c.perfil].painel){
+          toast('Esta matrícula não tem acesso ao painel'); sairDaNuvem(); return; }
+        u = {mat:c.mat, nome:c.nome, perfil:c.perfil, os:c.os||'', funcao:c.funcao||'', nuvem:true};
+        store.set('sms_usuario', JSON.stringify(u));
+        aplicarSessao(u); aoEntrar(); ouvirAuditorias(); baixarEfetivoNuvem();
+        toast('Conectado à base · ' + u.nome.split(' ')[0]);
+        return;
+      }
+      /* autenticou mas ainda não há cadastro: implantação */
+      u = {mat, nome:'Administrador', perfil:'admin', os:'', funcao:'', implantacao:true, nuvem:true};
+      store.set('sms_usuario', JSON.stringify(u));
+      aplicarSessao(u); aoEntrar();
+      toast('Base conectada — importe o efetivo para liberar os acessos');
+      return;
+    }catch(e){
+      const cd = (e && e.code) || '';
+      if(cd.indexOf('user-not-found')>=0){ primeiroAcesso(mat, sen); return; }
+      if(cd.indexOf('network')<0 && cd !== 'sem-nuvem'){ toast(msgErroLogin(e)); return; }
+    }
+  }
   if(!USUARIOS.length || !temAdmin()){
     // implantação: sem efetivo ou sem administrador definido, o acesso entra como administrador
     const c = acharUsuario(mat);
@@ -4404,6 +4678,7 @@ function renderUsuarios(){
     <div class="card-h">
       <h3>Colaboradores</h3><span class="sub" id="usrCount">${lista.length} exibido(s)</span>
       <div class="map-tools no-print">
+        <button class="btn btn-sm" onclick="publicarEfetivo()" title="Enviar o efetivo para a base e liberar os acessos">☁ Republicar na base</button>
         <input class="inp" id="usrBusca" style="width:230px;padding:8px 11px" autocomplete="off"
                placeholder="Buscar nome, matrícula ou função" value="${esc(USR_BUSCA)}"
                oninput="USR_BUSCA=this.value;renderUsrLista()">
@@ -4692,13 +4967,60 @@ function confirmarImport(){
   });
   const eu = USUARIO && acharUsuario(USUARIO.mat);
   if(eu && !USUARIOS.some(u=>u.perfil==='admin' && u.ativo)){ eu.perfil = 'admin'; eu.manual = true; }
+  else if(USUARIO && !USUARIOS.some(u=>u.perfil==='admin' && u.ativo)){
+    const m = acharUsuario(USUARIO.mat); if(m){ m.perfil = 'admin'; m.manual = true; }
+  }
   saveUsuarios();
   const cs = atualizarContratos();
   regerarDemo();                       // realinha os dados de exemplo às O.S reais do contrato
   closeModal(); renderUsuarios();
   if(typeof renderSMS==='function') renderSMS();      // metas e previsto x realizado passam a usar o efetivo real
-  toast(USUARIOS.length + ' pessoa(s) e ' + cs.length + ' O.S importadas');
-  if(!temAdmin()) setTimeout(definirAdministrador, 400);   // ninguém ficaria com a chave do sistema
+  if(NUVEM.pronta && firebase.auth().currentUser) publicarEfetivo();
+  else {
+    toast(USUARIOS.length + ' pessoa(s) e ' + cs.length + ' O.S importadas');
+    if(!temAdmin()) setTimeout(definirAdministrador, 400);
+  }
+}
+/* Grava o efetivo na base e cria o acesso de cada matrícula.
+   Senha inicial de todos = a própria matrícula. */
+async function publicarEfetivo(){
+  const comAcesso = USUARIOS.filter(u=>u.ativo && u.perfil!=='nenhum');
+  openModal('Publicando na base de dados', `
+    <div id="pubBox">
+      <div class="alert al-blue">⏳ <div><b>Enviando o efetivo…</b><br>
+        <span id="pubEf">0 de ${USUARIOS.length}</span></div></div>
+      <div class="alert al-blue" style="margin-top:10px">🔑 <div><b>Liberando o acesso de cada matrícula…</b><br>
+        <span id="pubAc">aguardando</span></div></div>
+      <div class="hint" style="margin-top:12px">Não feche esta janela. São ${comAcesso.length} acessos a criar —
+        leva cerca de um minuto.</div>
+    </div>`);
+  try{
+    await gravarEfetivoNaNuvem(USUARIOS, (f,t)=>{ const e=$('pubEf'); if(e) e.textContent = f+' de '+t; });
+    const r = await criarAcessos(comAcesso, (i,t,c,x)=>{
+      const e=$('pubAc'); if(e) e.textContent = i+' de '+t+' · '+c+' novo(s), '+x+' já existia(m)';
+    });
+    await subirAreasNuvem();
+    await fecharImplantacao();
+    ouvirAuditorias();
+    openModal('Base de dados pronta', `
+      <div class="alert al-green" style="margin-bottom:14px">✅ <div>
+        <b>${USUARIOS.length} colaborador(es)</b> na base e <b>${comAcesso.length} acesso(s)</b> liberado(s)
+        (${r.criados} criado(s) agora, ${r.existentes} já existia(m)${r.erros?', '+r.erros+' com erro':''}).</div></div>
+      <div style="font-size:13.5px;color:var(--slate);line-height:1.6">
+        Agora é só o auditor abrir o aplicativo de campo e entrar com a <b>matrícula</b>.
+        A senha inicial de todos é <b>a própria matrícula</b> — nome, função e O.S vêm da base.
+        Nenhum arquivo precisa ser enviado para os celulares.</div>
+      <div style="display:flex;gap:9px;margin-top:14px"><button class="btn btn-p" style="flex:1;justify-content:center"
+        onclick="closeModal()">Entendi</button></div>`);
+  }catch(e){
+    openModal('Não deu para publicar', `
+      <div class="alert al-red" style="margin-bottom:14px">⚠ <div>${esc(e.message||String(e))}</div></div>
+      <p style="font-size:13.5px;color:var(--slate);line-height:1.55">O efetivo continua salvo neste computador.
+        Verifique a conexão e use <b>Republicar na base</b> na aba Efetivo.</p>
+      <div style="display:flex;gap:9px;margin-top:6px">
+        <button class="btn btn-p" style="flex:1;justify-content:center" onclick="closeModal();publicarEfetivo()">Tentar de novo</button>
+        <button class="btn" onclick="closeModal()">Fechar</button></div>`);
+  }
 }
 /* Exporta só o necessário para o aplicativo de campo identificar quem entrou:
    matrícula, nome, função, O.S, perfil, situação, afastamentos e interinidade.
@@ -5183,6 +5505,14 @@ ${relRodape(r,'FO-PO-SMS-003-B','PO-SMS-003 Rev. 04')}
 
 function _blobRelatorio(r){ return URL.createObjectURL(new Blob([relatorioHTML(r)],{type:'text/html;charset=utf-8'})); }
 function verRelatorio(r){
+  if(NUVEM.pronta && r && r.origem==='campo' && !r._fotosOk){
+    fotosDaNuvem(r).then(()=>verRelatorioAgora(r));
+    toast('Baixando as fotos da base…');
+    return;
+  }
+  return verRelatorioAgora(r);
+}
+function verRelatorioAgora(r){
   const w = window.open(_blobRelatorio(r),'_blank');
   if(!w) toast('Permita pop-ups para abrir o relatório');
 }

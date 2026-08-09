@@ -7,7 +7,7 @@
      Com sinal, o auditor sempre abre a versão mais nova; sem sinal, cai no cache.
    • ícones e manifests → cache primeiro, que não mudam.
    Ao publicar uma versão nova, troque o número do CACHE abaixo. */
-const CACHE = 'conect-v6';
+const CACHE = 'conect-v7';
 const ARQUIVOS = [
   './',
   './index.html',
@@ -18,12 +18,15 @@ const ARQUIVOS = [
   './icon-512.png',
   './apple-touch-icon.png'
 ];
+/* biblioteca do Firebase: guardada junto para o app continuar entrando sem sinal */
+const SDK = ['app','auth','firestore'].map(m =>
+  `https://www.gstatic.com/firebasejs/10.14.1/firebase-${m}-compat.js`);
 
 self.addEventListener('install', e => {
   self.skipWaiting();
   e.waitUntil(
     caches.open(CACHE).then(c => Promise.all(
-      ARQUIVOS.map(u => c.add(u).catch(() => null))   // um arquivo ausente não derruba a instalação
+      ARQUIVOS.concat(SDK).map(u => c.add(u).catch(() => null))   // um arquivo ausente não derruba a instalação
     ))
   );
 });
@@ -52,7 +55,19 @@ function comPrazo(promessa, ms) {
 
 self.addEventListener('fetch', e => {
   const req = e.request;
-  if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  if (req.method !== 'GET') return;
+
+  /* biblioteca do Firebase: cache primeiro, para abrir offline */
+  if (SDK.some(u => req.url.indexOf(u) === 0)) {
+    e.respondWith(
+      caches.match(req).then(hit => hit || fetch(req).then(res => {
+        if (res && res.status === 200) { const c2 = res.clone(); caches.open(CACHE).then(c => c.put(req, c2)); }
+        return res;
+      }))
+    );
+    return;
+  }
+  if (new URL(req.url).origin !== location.origin) return;
 
   if (ehPagina(req)) {
     e.respondWith((async () => {

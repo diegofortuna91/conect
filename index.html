@@ -691,11 +691,185 @@ function salvarNome(){
   if(F && !F.auditor) F.auditor = v;
   toast('Nome atualizado para ' + nomeExibicao(USUARIO));
 }
+/* =====================================================================
+   BASE DE DADOS NA NUVEM — Firebase (Firestore + Autenticação)
+   Projeto: service-conect · dados hospedados em São Paulo (southamerica-east1)
+
+   Como funciona:
+   • o efetivo vive em /efetivo/{matrícula}. Ao entrar, o app lê o próprio
+     cadastro e traz nome, função e O.S — nada de anexar arquivo no aparelho;
+   • as auditorias vão para /auditorias/{id} e as fotos em uma subcoleção,
+     para não estourar o limite de 1 MB por documento;
+   • sem sinal, o Firestore guarda no aparelho e envia sozinho quando voltar;
+   • se a nuvem não responder, o aplicativo continua funcionando no modo local.
+   ===================================================================== */
+const FB_CFG = {
+  apiKey: "AIzaSyA2lb0KrcskX7feyH3eHxJ5FrMlZa5Di_Y",
+  authDomain: "service-conect-f075c.firebaseapp.com",
+  projectId: "service-conect-f075c",
+  storageBucket: "service-conect-f075c.firebasestorage.app",
+  messagingSenderId: "1006181529816",
+  appId: "1:1006181529816:web:70fda769d5bdae5d58bfad"
+};
+const FB_VER = '10.14.1';
+const FB_SDK = ['app', 'auth', 'firestore'].map(m =>
+  `https://www.gstatic.com/firebasejs/${FB_VER}/firebase-${m}-compat.js`);
+const DOMINIO_LOGIN = '@conect.service';
+
+let FS = null;                                   // instância do Firestore
+const NUVEM = {pronta:false, tentou:false, online:false, erro:'', usuario:null};
+
+function emailDaMatricula(mat){
+  return String(mat||'').replace(/\D/g,'') + DOMINIO_LOGIN;
+}
+function carregarSDK(){
+  return new Promise(resolve => {
+    if(window.firebase && firebase.firestore) return resolve(true);
+    let i = 0;
+    const proximo = () => {
+      if(i >= FB_SDK.length) return resolve(!!(window.firebase && firebase.firestore));
+      const s = document.createElement('script');
+      s.src = FB_SDK[i++]; s.async = false;
+      s.onload = proximo;
+      s.onerror = () => resolve(false);
+      document.head.appendChild(s);
+    };
+    proximo();
+  });
+}
+async function iniciarNuvem(){
+  if(NUVEM.tentou) return NUVEM.pronta;
+  NUVEM.tentou = true;
+  try{
+    const ok = await carregarSDK();
+    if(!ok){ NUVEM.erro = 'Biblioteca da nuvem não carregou'; return false; }
+    if(!firebase.apps.length) firebase.initializeApp(FB_CFG);
+    FS = firebase.firestore();
+    try{ await FS.enablePersistence({synchronizeTabs:true}); }catch(e){ /* outra aba já ativou */ }
+    NUVEM.pronta = true;
+    NUVEM.online = navigator.onLine;
+    firebase.auth().onAuthStateChanged(u => { NUVEM.usuario = u || null; });
+    return true;
+  }catch(e){
+    NUVEM.erro = e.message || String(e);
+    return false;
+  }
+}
+/* espera a sessão salva ser restaurada (funciona offline, o Firebase guarda no aparelho) */
+function sessaoNuvem(){
+  return new Promise(resolve => {
+    if(!NUVEM.pronta) return resolve(null);
+    const fim = firebase.auth().onAuthStateChanged(u => { fim(); resolve(u || null); });
+  });
+}
+async function entrarNaNuvem(mat, senha){
+  if(!NUVEM.pronta) throw {code:'sem-nuvem'};
+  const cred = await firebase.auth().signInWithEmailAndPassword(emailDaMatricula(mat), senha);
+  return cred.user;
+}
+async function meuCadastro(mat){
+  const d = await FS.collection('efetivo').doc(String(mat).replace(/\D/g,'')).get();
+  return d.exists ? d.data() : null;
+}
+function sairDaNuvem(){ try{ firebase.auth().signOut(); }catch(e){} }
+
+function msgErroLogin(e){
+  const c = (e && e.code) || '';
+  if(c.indexOf('wrong-password')>=0 || c.indexOf('invalid-credential')>=0)
+    return 'Senha inválida — a senha inicial é a própria matrícula.';
+  if(c.indexOf('user-not-found')>=0)
+    return 'Matrícula ainda não liberada pelo administrador.';
+  if(c.indexOf('too-many-requests')>=0)
+    return 'Muitas tentativas seguidas. Aguarde um minuto e tente de novo.';
+  if(c.indexOf('network')>=0 || c === 'sem-nuvem')
+    return 'Sem conexão com a base de dados.';
+  return 'Não foi possível entrar: ' + (e && (e.message || e.code) || 'erro desconhecido');
+}
+
+/* ---------- envio das auditorias para a base ---------- */
+async function enviarParaNuvem(reg){
+  if(!NUVEM.pronta || !firebase.auth().currentUser) return false;
+  const {fotos, ptFoto, fotosNC, ...leve} = reg;
+  const doc = FS.collection('auditorias').doc(reg.id);
+  await doc.set(Object.assign({}, leve, {
+    matricula: String(USUARIO.mat).replace(/\D/g,''),
+    auditor: USUARIO.nome, funcao: USUARIO.funcao || leve.funcao || '',
+    enviadoEm: firebase.firestore.FieldValue.serverTimestamp()
+  }), {merge:true});
+  const pacotes = [];
+  if(ptFoto) pacotes.push(['pt', ptFoto]);
+  (fotos||[]).forEach((f,i)=> pacotes.push(['ev'+i, f]));
+  Object.keys(fotosNC||{}).forEach(n => (fotosNC[n]||[]).forEach((f,i)=> pacotes.push(['nc'+n+'-'+i, f])));
+  for(const [k, d] of pacotes){
+    if(!d) continue;
+    await doc.collection('fotos').doc(k).set({d:d});
+  }
+  return true;
+}
+async function sincronizarNuvem(silencioso){
+  const fila = DB.filter(r=>!r.sync);
+  if(!fila.length){ if(!silencioso) toast('Nada pendente para enviar'); return; }
+  if(!NUVEM.pronta || !firebase.auth().currentUser){
+    if(!silencioso) toast('Sem conexão com a base — os registros seguem salvos no aparelho');
+    return;
+  }
+  let n = 0;
+  for(const r of fila){
+    try{ await enviarParaNuvem(r); r.sync = true; n++; }
+    catch(e){ break; }               // offline: o restante fica na fila
+  }
+  if(n){ saveDB(); atualizaContador(); if($('lista').classList.contains('on')) renderLista(); }
+  if(!silencioso) toast(n ? n+' auditoria(s) enviada(s) à base' : 'Sem conexão agora — enviaremos assim que houver sinal');
+}
+/* ---------- áreas vindas da base ---------- */
+async function baixarAreas(){
+  if(!NUVEM.pronta || !firebase.auth().currentUser) return;
+  try{
+    const q = await FS.collection('areas').get();
+    if(q.empty) return;
+    const l = []; q.forEach(d => l.push(d.data()));
+    if(l.length){ AREAS = prepararAreas(l); saveAreas(); }
+  }catch(e){}
+}
+async function enviarAreaNova(a){
+  if(!NUVEM.pronta || !firebase.auth().currentUser || !a) return;
+  try{
+    await FS.collection('areas').doc('campo-' + a.nome.toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,60)).set({
+      nome: a.nome, ponto: (a.lat!=null ? [a.lat, a.lng] : null), campo: true, pendente: true,
+      criadaPor: a.por || '', criadaPorMat: a.mat || '', criadaPorFuncao: a.funcao || '',
+      criadaEm: a.data || hojeISO(), auditoriaOrigem: a.auditoria || ''
+    }, {merge:true});
+  }catch(e){}
+}
 function entrar(){
   const mat = ($('lgUser').value||'').trim(), sen = ($('lgPass').value||'').trim();
   if(!mat){ $('lgUser').focus(); toast('Informe a matrícula'); return; }
   if(!sen){ $('lgPass').focus(); toast('Informe a senha'); return; }
+  entrarAsync(mat, sen);
+}
+async function entrarAsync(mat, sen){
   let u;
+  /* 1º caminho: base de dados na nuvem — nome, função e O.S vêm da matrícula */
+  if(await iniciarNuvem()){
+    try{
+      await entrarNaNuvem(mat, sen);
+      const c = await meuCadastro(mat);
+      if(!c){ toast('Matrícula sem cadastro no efetivo da base'); sairDaNuvem(); return; }
+      if(!c.ativo){ toast('Colaborador inativo no controle de efetivo'); sairDaNuvem(); return; }
+      if(c.perfil==='nenhum'){ toast('Esta matrícula não tem acesso ao aplicativo de campo'); sairDaNuvem(); return; }
+      u = {mat:c.mat, nome:c.nome, perfil:c.perfil, os:c.os||'', funcao:c.funcao||'', nuvem:true};
+      store.set('sms_usuario', JSON.stringify(u));
+      aplicarSessao(u); aoEntrar();
+      baixarAreas(); sincronizarNuvem(true);
+      toast('Bem-vindo, ' + nomeExibicao(u));
+      return;
+    }catch(e){
+      const c = (e && e.code) || '';
+      /* só cai para o modo local se o problema for de rede */
+      if(c.indexOf('network')<0 && c !== 'sem-nuvem'){ toast(msgErroLogin(e)); return; }
+    }
+  }
+  /* 2º caminho: sem rede — usa o que já estiver no aparelho */
   if(!USUARIOS.length){
     u = {mat, nome:nomeDoLogin(mat)||('Matrícula '+mat), perfil:'campo', os:'', funcao:'Auditor', implantacao:true};
   } else {
@@ -712,6 +886,7 @@ function entrar(){
 }
 function sair(){
   if(!confirm('Encerrar a sessão?')) return;
+  sairDaNuvem();
   store.set('sms_usuario','');
   USUARIO=null; document.body.classList.remove('logged');
   const c=$('userchip'); if(c) c.style.display='none';
@@ -1098,12 +1273,15 @@ function venceInterinidades(){
    travados no formulário e no relatório. */
 function statusEfetivo(){
   const el = $('statusEfetivo'); if(!el) return;
+  if(NUVEM.pronta){
+    el.innerHTML = `<div class="lg-ef ok">✓ Conectado à base de dados do contrato — entre com a sua
+      <b>matrícula</b> e a senha. Nome, função e O.S vêm automáticos.</div>`;
+    return;
+  }
   const n = USUARIOS.filter(u=>u.ativo && u.perfil!=='nenhum').length;
   el.innerHTML = n
-    ? `<div class="lg-ef ok">✓ Lista de efetivo carregada — ${n} colaborador(es) com acesso.
-        Entre com a sua matrícula que o nome e a função vêm automáticos.</div>`
-    : `<div class="lg-ef">⚠ Este aparelho ainda não recebeu a lista de efetivo, então o app vai
-        pedir o seu nome. <a href="#" onclick="event.preventDefault();comoCarregar()">como carregar a lista</a></div>`;
+    ? `<div class="lg-ef ok">✓ Lista de efetivo neste aparelho — ${n} colaborador(es) com acesso.</div>`
+    : `<div class="lg-ef">⏳ Procurando a base de dados… sem sinal, o app entra em modo local e pede o seu nome.</div>`;
 }
 function comoCarregar(){
   openModal('Carregar a lista de efetivo', `
@@ -2217,9 +2395,14 @@ function finalizar(){
                   funcao:(typeof USUARIO!=='undefined'&&USUARIO?USUARIO.funcao:'')||F.funcao||'',
                   os:F.contrato||'', auditoria:F.id, data:F.data, hora:F.horaIni||''};
   }
-  F.sync = navigator.onLine;
-  DB.unshift(JSON.parse(JSON.stringify(F)));
+  F.sync = false;
+  const registro = JSON.parse(JSON.stringify(F));
+  DB.unshift(registro);
   saveDB();
+  enviarParaNuvem(registro)
+    .then(ok => { if(ok){ registro.sync = true; saveDB(); atualizaContador(); } })
+    .catch(()=>{});
+  if(registro.areaNova) enviarAreaNova(registro.areaNova);
   const crit = cl.cls==='crit';
   openModal(TIPOS[TIPO].curto+' registrada', `
     <div style="text-align:center;padding:6px 0 16px">
@@ -2320,9 +2503,7 @@ function verRegistro(i){
 }
 function sincronizar(){
   if(!navigator.onLine){ toast('Sem conexão — os dados continuam salvos no aparelho'); return; }
-  const n = pendentes().length;
-  DB.forEach(r=>r.sync=true); saveDB(); renderLista();
-  toast(n+' auditoria(s) enviada(s) ao servidor');
+  sincronizarNuvem(false);
 }
 function exportarJSON(){
   const a=document.createElement('a');
@@ -2699,6 +2880,21 @@ function aplicaUsuarioNaAuditoria(){
 }
 loadUsuarios(); venceInterinidades(); loadContratos(); loadAreas(); loadDB(); novaAuditoria('comportamental'); netStatus(); aplicaLogos(); atualizaContador(); renderHub(); avisoContexto(); statusEfetivo();
 const _u = sessaoSalva(); if(_u){ aplicarSessao(_u); aoEntrar(); } else setTimeout(()=>{ const e=$('lgUser'); e&&e.focus(); },120);
+/* liga na base assim que o app abre: revalida a sessão, baixa áreas e envia o que ficou pendente */
+iniciarNuvem().then(async ok => {
+  statusEfetivo();
+  if(!ok) return;
+  const su = await sessaoNuvem();
+  if(su && USUARIO){
+    try{
+      const c = await meuCadastro(USUARIO.mat);
+      if(c){ USUARIO = {mat:c.mat, nome:c.nome, perfil:c.perfil, os:c.os||'', funcao:c.funcao||'', nuvem:true};
+        store.set('sms_usuario', JSON.stringify(USUARIO));
+        aplicarSessao(USUARIO); aplicaUsuarioNaAuditoria(); renderHub(); }
+    }catch(e){}
+    baixarAreas(); sincronizarNuvem(true);
+  }
+});
 
 /* =====================================================================
    RELATÓRIO FORMAL DE AUDITORIA — FO-PO-SMS-005-A
