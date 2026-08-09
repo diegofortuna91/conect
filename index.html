@@ -904,21 +904,22 @@ async function entrarAsync(mat, sen){
       if(c.indexOf('network')<0 && c !== 'sem-nuvem'){ toast(msgErroLogin(e)); return; }
     }
   }
-  /* 2º caminho: sem rede — usa o que já estiver no aparelho */
-  if(!USUARIOS.length){
-    u = {mat, nome:nomeDoLogin(mat)||('Matrícula '+mat), perfil:'campo', os:'', funcao:'Auditor', implantacao:true};
-  } else {
-    const c = acharUsuario(mat);
-    if(!c){ toast('Matrícula não encontrada no efetivo'); return; }
-    if(!c.ativo){ toast('Colaborador inativo no controle de efetivo'); return; }
-    if(c.perfil==='nenhum' || !PERFIS[c.perfil].app){ toast('Esta matrícula não tem acesso ao aplicativo de campo'); return; }
-    if(soDigitos(sen)!==soDigitos(c.mat)){ toast('Senha inválida — a senha inicial é a própria matrícula'); return; }
-    u = {mat:c.mat, nome:c.nome, perfil:c.perfil, os:c.os, funcao:c.funcao};
+  /* 2º caminho: sem rede. Só entra quem JÁ validou a senha neste aparelho —
+     a sessão fica guardada pelo Firebase e vale offline. Nada de senha aceita no escuro. */
+  const jaLogado = NUVEM.pronta ? await sessaoNuvem() : null;
+  const salvo = sessaoSalva();
+  if(jaLogado && salvo && String(salvo.mat).replace(/\D/g,'') === String(mat).replace(/\D/g,'')){
+    aplicarSessao(salvo); aoEntrar();
+    toast('Sem conexão — usando a sessão já validada neste aparelho');
+    return;
   }
-  store.set('sms_usuario', JSON.stringify(u));
-  aplicarSessao(u); aoEntrar();
-  if(u.implantacao && (/^\d+$/.test(u.nome) || /^Matr[íi]cula /i.test(u.nome))) setTimeout(pedirNome, 600);
+  if(jaLogado && salvo){
+    toast('Este aparelho está com a sessão de ' + nomeExibicao(salvo) + '. Encerre a sessão para trocar de auditor.');
+    return;
+  }
+  toast('Sem conexão com a base. Conecte-se à internet uma vez para liberar o seu acesso neste aparelho.');
 }
+
 function sair(){
   if(!confirm('Encerrar a sessão?')) return;
   sairDaNuvem();
@@ -2915,11 +2916,19 @@ function aplicaUsuarioNaAuditoria(){
 }
 loadUsuarios(); venceInterinidades(); loadContratos(); loadAreas(); loadDB(); novaAuditoria('comportamental'); netStatus(); aplicaLogos(); atualizaContador(); renderHub(); avisoContexto(); statusEfetivo();
 const _u = sessaoSalva(); if(_u){ aplicarSessao(_u); aoEntrar(); } else setTimeout(()=>{ const e=$('lgUser'); e&&e.focus(); },120);
-/* liga na base assim que o app abre: revalida a sessão, baixa áreas e envia o que ficou pendente */
+/* liga na base assim que o app abre: confere a sessão, baixa áreas e envia o que ficou pendente */
 iniciarNuvem().then(async ok => {
   statusEfetivo();
   if(!ok) return;
   const su = await sessaoNuvem();
+  /* sessão guardada no aparelho sem login válido no Firebase = porta aberta. Fecha. */
+  if(!su && USUARIO && !USUARIO.legado){
+    store.set('sms_usuario','');
+    USUARIO = null; document.body.classList.remove('logged');
+    const c = $('userchip'); if(c) c.style.display='none';
+    toast('Sessão encerrada — entre novamente com a sua matrícula');
+    return;
+  }
   if(su && USUARIO){
     try{
       const c = await meuCadastro(USUARIO.mat);

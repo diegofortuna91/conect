@@ -1739,23 +1739,17 @@ async function entrarAsync(mat, sen){
       if(cd.indexOf('network')<0 && cd !== 'sem-nuvem'){ toast(msgErroLogin(e)); return; }
     }
   }
-  if(!USUARIOS.length || !temAdmin()){
-    // implantação: sem efetivo ou sem administrador definido, o acesso entra como administrador
-    const c = acharUsuario(mat);
-    u = c ? {mat:c.mat, nome:c.nome, perfil:'admin', os:c.os, funcao:c.funcao, implantacao:true}
-          : {mat, nome:nomeDoLogin(mat)||('Matrícula '+mat), perfil:'admin', os:'', funcao:'Administrador', implantacao:true};
-  } else {
-    const c = acharUsuario(mat);
-    if(!c){ toast('Matrícula não encontrada no efetivo'); return; }
-    if(!c.ativo){ toast('Colaborador inativo no controle de efetivo'); return; }
-    if(c.perfil==='nenhum'){ toast('Esta matrícula não tem acesso ao sistema'); return; }
-    if(soDigitos(sen)!==soDigitos(c.mat)){ toast('Senha inválida — a senha inicial é a própria matrícula'); return; }
-    if(!PERFIS[c.perfil].painel){ toast('Seu perfil acessa o aplicativo de campo, não o painel'); return; }
-    u = {mat:c.mat, nome:c.nome, perfil:c.perfil, os:c.os, funcao:c.funcao};
+  /* Sem rede: só entra quem já validou a senha neste computador. */
+  const jaLogado = NUVEM.pronta ? await sessaoNuvem() : null;
+  const salvo = sessaoSalva();
+  if(jaLogado && salvo && String(salvo.mat).replace(/\D/g,'') === String(mat).replace(/\D/g,'')){
+    aplicarSessao(salvo); aoEntrar();
+    toast('Sem conexão — usando a sessão já validada neste computador');
+    return;
   }
-  store.set('sms_usuario', JSON.stringify(u));
-  aplicarSessao(u); aoEntrar();
+  toast('Sem conexão com a base de dados. Verifique a internet e tente de novo.');
 }
+
 function sair(){
   if(!confirm('Encerrar a sessão?')) return;
   store.set('sms_usuario','');
