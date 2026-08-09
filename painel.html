@@ -1579,8 +1579,24 @@ async function baixarEfetivoNuvem(){
     if(document.body.classList.contains('logged')) renderSMS();
   }catch(e){}
 }
+/* Diz exatamente por que a base não está disponível, em vez de culpar a internet. */
+function estadoNuvem(){
+  if(location.protocol === 'file:')
+    return {ok:false, curto:'arquivo local',
+      motivo:'Você abriu o <b>arquivo salvo no computador</b> (file://). Nesse modo o Firebase não autoriza o login. '
+           + 'Use o endereço publicado: <b>https://diegofortuna91.github.io/conect/painel.html</b>'};
+  if(!NUVEM.pronta)
+    return {ok:false, curto:'biblioteca não carregou',
+      motivo:'A biblioteca da base de dados não carregou. Verifique a internet e recarregue a página com <b>Ctrl+F5</b>.'};
+  if(!firebase.auth().currentUser)
+    return {ok:false, curto:'sem autenticação',
+      motivo:'Você está no painel, mas <b>não autenticado na base</b> — a sessão pode ter expirado. '
+           + 'Encerre a sessão no seu nome, no topo, e entre de novo com a matrícula e a senha.'};
+  return {ok:true, curto:'conectada', motivo:''};
+}
 async function gravarEfetivoNaNuvem(lista, aoAndar){
-  if(!NUVEM.pronta || !firebase.auth().currentUser) throw new Error('sem conexão com a base');
+  const st = estadoNuvem();
+  if(!st.ok){ const e = new Error(st.motivo); e.diag = st; throw e; }
   const N = 400; let feitos = 0;
   for(let i=0; i<lista.length; i+=N){
     const lote = FS.batch();
@@ -5207,9 +5223,9 @@ async function publicarEfetivo(){
         onclick="closeModal()">Entendi</button></div>`);
   }catch(e){
     openModal('Não deu para publicar', `
-      <div class="alert al-red" style="margin-bottom:14px">⚠ <div>${esc(e.message||String(e))}</div></div>
-      <p style="font-size:13.5px;color:var(--slate);line-height:1.55">O efetivo continua salvo neste computador.
-        Verifique a conexão e use <b>Republicar na base</b> na aba Efetivo.</p>
+      <div class="alert al-red" style="margin-bottom:14px">⚠ <div>${e.diag ? e.diag.motivo : esc(e.message||String(e))}</div></div>
+      <p style="font-size:13.5px;color:var(--slate);line-height:1.55">O efetivo continua salvo neste computador —
+        nada foi perdido. Resolvido o ponto acima, use <b>☁ Republicar na base</b> na aba Efetivo.</p>
       <div style="display:flex;gap:9px;margin-top:6px">
         <button class="btn btn-p" style="flex:1;justify-content:center" onclick="closeModal();publicarEfetivo()">Tentar de novo</button>
         <button class="btn" onclick="closeModal()">Fechar</button></div>`);
@@ -5350,10 +5366,18 @@ function aplicaLogos(){
   const b=$('lgLogo');   if(b) b.src=LOGO_BRANCO;
 }
 function netStatus(){
-  const on=navigator.onLine, p=$('netpill');
-  p.classList.toggle('off',!on);
-  p.querySelector('.lbl').textContent = on ? 'Conectado ao servidor' : 'Sem conexão';
+  const p = $('netpill'); if(!p) return;
+  const st = (typeof estadoNuvem === 'function' && typeof NUVEM !== 'undefined') ? estadoNuvem() : null;
+  const on = navigator.onLine && (!st || st.ok);
+  p.classList.toggle('off', !on);
+  p.querySelector('.lbl').textContent = !navigator.onLine ? 'Sem internet'
+    : (st && st.ok ? 'Base de dados conectada' : 'Base indisponível · ' + ((st&&st.curto)||'verificando'));
+  p.title = st && !st.ok ? String(st.motivo).replace(/<[^>]+>/g,'') : 'Conectado ao Firestore do contrato';
+  p.style.cursor = st && !st.ok ? 'help' : '';
+  p.onclick = () => { const x = estadoNuvem(); if(!x.ok) openModal('Base de dados', `
+    <div class="alert al-amber">⚠ <div>${x.motivo}</div></div>`); };
 }
+setInterval(()=>{ try{ netStatus(); }catch(e){} }, 15000);
 window.addEventListener('online',netStatus); window.addEventListener('offline',netStatus);
 
 function aoEntrar(){ renderSMS(); setTimeout(garantirMapa,150); }
