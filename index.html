@@ -285,6 +285,10 @@ table.dt td.num.z{color:var(--line);font-weight:400}
 .pend-ft b{color:var(--navy);font-size:13px}
 .pend-nota{margin-top:9px;padding-top:9px;border-top:1px solid var(--line2);
   font-size:11px;color:var(--slate2);font-weight:600;line-height:1.5}
+.lg-ef{margin-top:10px;font-size:11.5px;font-weight:600;line-height:1.5;color:#c6cff0;
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:9px;padding:8px 11px;text-align:left}
+.lg-ef.ok{color:#cfe8b0;border-color:rgba(124,179,66,.35);background:rgba(124,179,66,.12)}
+.lg-ef a{color:#9ccc42;font-weight:800}
 .trava{display:flex;align-items:center;gap:9px;background:var(--line2);border:1px solid var(--line);
   border-radius:10px;padding:9px 12px;min-height:44px}
 .trava .tx{flex:1;min-width:0}
@@ -570,6 +574,7 @@ if('serviceWorker' in navigator){
         <input type="file" id="usrFile" accept=".json" style="display:none" onchange="importarUsuariosJSON(this)">
         <div style="margin-top:8px"><a class="lg-link" href="#" style="font-size:12px"
           onclick="event.preventDefault();diagnostico()">🔎 Testar recursos do aparelho</a></div>
+        <div id="statusEfetivo"></div>
         <div id="avisoCtx"></div>
       </div>
       <div class="lg-badge"><svg class="lg-seal" viewBox="0 0 48 48" fill="none">
@@ -1088,6 +1093,38 @@ function venceInterinidades(){
 }
 
 /* ---------- carga do efetivo enviado pelo painel ---------- */
+/* Mostra na tela de login se o aparelho já recebeu a lista de efetivo.
+   Com a lista carregada, o nome completo e a função vêm da matrícula e ficam
+   travados no formulário e no relatório. */
+function statusEfetivo(){
+  const el = $('statusEfetivo'); if(!el) return;
+  const n = USUARIOS.filter(u=>u.ativo && u.perfil!=='nenhum').length;
+  el.innerHTML = n
+    ? `<div class="lg-ef ok">✓ Lista de efetivo carregada — ${n} colaborador(es) com acesso.
+        Entre com a sua matrícula que o nome e a função vêm automáticos.</div>`
+    : `<div class="lg-ef">⚠ Este aparelho ainda não recebeu a lista de efetivo, então o app vai
+        pedir o seu nome. <a href="#" onclick="event.preventDefault();comoCarregar()">como carregar a lista</a></div>`;
+}
+function comoCarregar(){
+  openModal('Carregar a lista de efetivo', `
+    <p style="font-size:13.5px;color:var(--slate);margin:0 0 14px;line-height:1.6">
+      Com a lista no aparelho, cada auditor entra apenas com a <b>matrícula</b> e o aplicativo já traz
+      <b>nome completo, função e O.S</b> — travados no formulário e no relatório.</p>
+    <ol style="font-size:13.5px;color:var(--slate);line-height:1.7;padding-left:20px;margin:0">
+      <li>No computador, abra o <b>Painel</b> e vá em <b>⚙ Efetivo</b>.</li>
+      <li>Importe a planilha de Controle do Efetivo, se ainda não fez.</li>
+      <li>Clique em <b>⬇ Exportar usuários</b> — sai o arquivo <b>efetivo-service-conect.json</b>.</li>
+      <li>Mande esse arquivo para o celular (e-mail, WhatsApp ou AirDrop) e salve no app <b>Arquivos</b>.</li>
+      <li>Aqui na tela de login, toque em <b>⚙ Carregar lista de usuários</b> e escolha o arquivo.</li>
+    </ol>
+    <div class="alert al-amber" style="margin-top:14px">🔒 <div>O arquivo traz apenas matrícula, nome, função e O.S.
+      CPF, PIS, telefone, endereço, e-mail e data de nascimento não são exportados.</div></div>
+    <div style="display:flex;gap:9px;margin-top:14px">
+      <button class="btn btn-p" style="flex:1;justify-content:center"
+        onclick="closeModal();document.getElementById('usrFile').click()">Escolher o arquivo agora</button>
+      <button class="btn" onclick="closeModal()">Fechar</button>
+    </div>`);
+}
 function importarUsuariosJSON(inp){
   const f = inp.files[0]; if(!f) return;
   const fr = new FileReader();
@@ -1095,8 +1132,16 @@ function importarUsuariosJSON(inp){
     try{
       const l = JSON.parse(e.target.result);
       if(!Array.isArray(l) || !l.length) throw new Error('Arquivo sem usuários.');
-      USUARIOS = l; saveUsuarios(); atualizarContratos();
-      toast(USUARIOS.filter(u=>u.ativo && u.perfil!=='nenhum').length + ' usuário(s) habilitado(s) neste aparelho');
+      USUARIOS = l; saveUsuarios(); atualizarContratos(); statusEfetivo();
+      const n = USUARIOS.filter(u=>u.ativo && u.perfil!=='nenhum').length;
+      if(USUARIO){                       // já logado: puxa o nome e a função da lista recém-carregada
+        const c = acharUsuario(USUARIO.mat);
+        if(c){ USUARIO = {mat:c.mat, nome:c.nome, perfil:c.perfil, os:c.os, funcao:c.funcao};
+          store.set('sms_usuario', JSON.stringify(USUARIO));
+          aplicarSessao(USUARIO); aplicaUsuarioNaAuditoria(); renderHub();
+          toast('Bem-vindo, ' + nomeExibicao(USUARIO)); return; }
+      }
+      toast(n + ' usuário(s) habilitado(s) neste aparelho');
     }catch(err){ toast('Arquivo inválido: '+err.message); }
   };
   fr.readAsText(f,'UTF-8');
@@ -2652,7 +2697,7 @@ function aplicaUsuarioNaAuditoria(){
   }
   if(USUARIO.os) F.contrato = USUARIO.os;
 }
-loadUsuarios(); venceInterinidades(); loadContratos(); loadAreas(); loadDB(); novaAuditoria('comportamental'); netStatus(); aplicaLogos(); atualizaContador(); renderHub(); avisoContexto();
+loadUsuarios(); venceInterinidades(); loadContratos(); loadAreas(); loadDB(); novaAuditoria('comportamental'); netStatus(); aplicaLogos(); atualizaContador(); renderHub(); avisoContexto(); statusEfetivo();
 const _u = sessaoSalva(); if(_u){ aplicarSessao(_u); aoEntrar(); } else setTimeout(()=>{ const e=$('lgUser'); e&&e.focus(); },120);
 
 /* =====================================================================

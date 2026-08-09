@@ -4700,11 +4700,36 @@ function confirmarImport(){
   toast(USUARIOS.length + ' pessoa(s) e ' + cs.length + ' O.S importadas');
   if(!temAdmin()) setTimeout(definirAdministrador, 400);   // ninguém ficaria com a chave do sistema
 }
+/* Exporta só o necessário para o aplicativo de campo identificar quem entrou:
+   matrícula, nome, função, O.S, perfil, situação, afastamentos e interinidade.
+   Nada de CPF, PIS, telefone, endereço, e-mail ou data de nascimento. */
 function exportarUsuarios(){
+  const enxuto = USUARIOS.map(u=>({
+    mat:u.mat, nome:u.nome, funcao:u.funcao||'', os:u.os||'', perfil:u.perfil, ativo:!!u.ativo,
+    perfilBase:u.perfilBase||u.perfil,
+    interinoDe:u.interinoDe||null, interinoAte:u.interinoAte||null,
+    afastamentos:(u.afastamentos||[]).map(a=>({tipo:a.tipo, de:a.de, ate:a.ate}))
+  }));
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(USUARIOS)],{type:'application/json'}));
-  a.download = 'usuarios_service_conect.json'; a.click();
-  toast('Arquivo gerado — carregue no aplicativo de campo');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(enxuto)],{type:'application/json'}));
+  a.download = 'efetivo-service-conect.json'; a.click();
+  openModal('Lista de efetivo gerada', `
+    <div class="alert al-green" style="margin-bottom:14px">⬇ <div><b>efetivo-service-conect.json</b> ·
+      ${enxuto.length} colaborador(es), ${enxuto.filter(u=>u.ativo && u.perfil!=='nenhum').length} com acesso ao aplicativo.
+      O arquivo foi para a pasta <b>Downloads</b> deste computador.</div></div>
+    <div style="font-size:13.5px;color:var(--slate);line-height:1.6">
+      <b>Como levar para o celular do auditor:</b>
+      <ol style="margin:9px 0 0;padding-left:20px">
+        <li>Envie o arquivo para o aparelho — e-mail, WhatsApp, AirDrop ou salvando no app Arquivos.</li>
+        <li>No celular, abra o aplicativo de campo e toque em <b>⚙ Carregar lista de usuários</b>, na tela de login.</li>
+        <li>Escolha o arquivo. A partir daí cada pessoa entra com a <b>matrícula</b> e o app já traz
+            <b>nome completo, função e O.S</b> automaticamente.</li>
+      </ol>
+      <div class="hint" style="margin-top:11px">🔒 O arquivo não contém CPF, PIS, telefone, endereço,
+        e-mail nem data de nascimento — apenas o necessário para identificar o auditor.</div>
+    </div>
+    <div style="display:flex;gap:9px;margin-top:14px"><button class="btn btn-p" style="flex:1;justify-content:center"
+      onclick="closeModal()">Entendi</button></div>`);
 }
 
 /* =====================================================================
