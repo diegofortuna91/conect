@@ -1624,6 +1624,27 @@ async function fecharImplantacao(){
     }, {merge:true});
   }catch(e){}
 }
+/* O Firestore não aceita lista dentro de lista. Os polígonos viajam achatados
+   ([lat1,lng1,lat2,lng2,...]) e voltam a ser pares na leitura. */
+const paresDe = a => { const l=[]; for(let i=0;i+1<a.length;i+=2) l.push([+a[i], +a[i+1]]); return l; };
+function areaParaNuvem(a){
+  const o = {nome:a.nome};
+  if(Array.isArray(a.ponto)) o.ponto = a.ponto.map(Number);
+  if(Array.isArray(a.centro)) o.centro = a.centro.map(Number);
+  if(Array.isArray(a.poly)) o.poly = a.poly.reduce((s,p)=>s.concat([+p[0], +p[1]]), []);
+  if(Array.isArray(a.rota)) o.rota = a.rota.reduce((s,p)=>s.concat([+p[0], +p[1]]), []);
+  ['campo','pendente','foco','criadaPor','criadaPorMat','criadaPorFuncao','criadaEm','criadaHora',
+   'auditoriaOrigem','aprovadaPor','aprovadaPorMat','aprovadaEm'].forEach(k=>{
+    if(a[k] !== undefined && a[k] !== null) o[k] = a[k];
+  });
+  return o;
+}
+function areaDaNuvem(o){
+  const a = Object.assign({}, o);
+  if(Array.isArray(o.poly) && o.poly.length) a.poly = paresDe(o.poly);
+  if(Array.isArray(o.rota) && o.rota.length) a.rota = paresDe(o.rota);
+  return a;
+}
 async function subirAreasNuvem(){
   if(!NUVEM.pronta || !firebase.auth().currentUser) return 0;
   const N = 300; let n = 0;
@@ -1631,11 +1652,20 @@ async function subirAreasNuvem(){
     const lote = FS.batch();
     AREAS.slice(i, i+N).forEach((a,j)=>{
       const id = 'a-' + (a.nome||('area'+(i+j))).toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,60);
-      lote.set(FS.collection('areas').doc(id), JSON.parse(JSON.stringify(a)), {merge:true});
+      lote.set(FS.collection('areas').doc(id), areaParaNuvem(a), {merge:true});
     });
     await lote.commit(); n += Math.min(N, AREAS.length - i);
   }
   return n;
+}
+async function baixarAreasNuvem(){
+  if(!NUVEM.pronta || !firebase.auth().currentUser) return;
+  try{
+    const q = await FS.collection('areas').get();
+    if(q.empty) return;
+    const l = []; q.forEach(d=> l.push(areaDaNuvem(d.data())));
+    if(l.length){ AREAS = prepararAreas(l); saveAreas(); }
+  }catch(e){}
 }
 /* escuta as auditorias que chegam do campo */
 function ouvirAuditorias(){
@@ -1687,7 +1717,7 @@ async function entrarAsync(mat, sen){
           toast('Esta matrícula não tem acesso ao painel'); sairDaNuvem(); return; }
         u = {mat:c.mat, nome:c.nome, perfil:c.perfil, os:c.os||'', funcao:c.funcao||'', nuvem:true};
         store.set('sms_usuario', JSON.stringify(u));
-        aplicarSessao(u); aoEntrar(); ouvirAuditorias(); baixarEfetivoNuvem();
+        aplicarSessao(u); aoEntrar(); ouvirAuditorias(); baixarEfetivoNuvem(); baixarAreasNuvem();
         toast('Conectado à base · ' + u.nome.split(' ')[0]);
         return;
       }
@@ -2008,6 +2038,10 @@ function cadastrarAreaNova(nome){
   if(ponto) nova.ponto = ponto;
   AREAS = prepararAreas([...AREAS, nova]);
   saveAreas();
+  if(NUVEM.pronta && firebase.auth().currentUser){
+    const id = 'a-' + nova.nome.toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,60);
+    FS.collection('areas').doc(id).set(areaParaNuvem(nova), {merge:true}).catch(()=>{});
+  }
   if(typeof renderSMS==='function') renderSMS();
   abrirImportKML();
   toast(a.nome + (ponto ? ' incluída com a posição registrada em campo' : ' incluída — sem coordenada de GPS'));
@@ -2061,6 +2095,10 @@ function confirmarExclusaoArea(nome){
   const a = AREAS[i];
   const motivo = (($('exMotivo')||{}).value||'').trim();
   AREAS.splice(i,1);
+  if(NUVEM.pronta && firebase.auth().currentUser){
+    const id = 'a-' + a.nome.toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,60);
+    FS.collection('areas').doc(id).delete().catch(()=>{});
+  }
   AREAS_EXCLUIDAS.push({area:a, nome:a.nome, motivo,
     por:(USUARIO&&USUARIO.nome)||'', mat:(USUARIO&&USUARIO.mat)||'', em:hojeISO()});
   salvarExcluidas(); saveAreas();
@@ -5024,13 +5062,15 @@ async function publicarEfetivo(){
     const r = await criarAcessos(comAcesso, (i,t,c,x)=>{
       const e=$('pubAc'); if(e) e.textContent = i+' de '+t+' · '+c+' novo(s), '+x+' já existia(m)';
     });
-    await subirAreasNuvem();
+    let areasOK = 0, areasErro = '';
+    try{ areasOK = await subirAreasNuvem(); }catch(e){ areasErro = e.message || String(e); }
     await fecharImplantacao();
     ouvirAuditorias();
     openModal('Base de dados pronta', `
       <div class="alert al-green" style="margin-bottom:14px">✅ <div>
         <b>${USUARIOS.length} colaborador(es)</b> na base e <b>${comAcesso.length} acesso(s)</b> liberado(s)
-        (${r.criados} criado(s) agora, ${r.existentes} já existia(m)${r.erros?', '+r.erros+' com erro':''}).</div></div>
+        (${r.criados} criado(s) agora, ${r.existentes} já existia(m)${r.erros?', '+r.erros+' com erro':''}).
+        <br>${areasOK ? areasOK+' área(s) enviada(s) para a base.' : 'Áreas não enviadas'+(areasErro?': '+esc(areasErro):'')+'.'}</div></div>
       <div style="font-size:13.5px;color:var(--slate);line-height:1.6">
         Agora é só o auditor abrir o aplicativo de campo e entrar com a <b>matrícula</b>.
         A senha inicial de todos é <b>a própria matrícula</b> — nome, função e O.S vêm da base.

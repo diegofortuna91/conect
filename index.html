@@ -830,13 +830,34 @@ async function sincronizarNuvem(silencioso){
   if(!silencioso) toast(n ? n+' auditoria(s) enviada(s) à base' : 'Sem conexão agora — enviaremos assim que houver sinal');
 }
 /* ---------- áreas vindas da base ---------- */
+/* O Firestore não aceita lista dentro de lista. Os polígonos viajam achatados
+   ([lat1,lng1,lat2,lng2,...]) e voltam a ser pares na leitura. */
+const paresDe = a => { const l=[]; for(let i=0;i+1<a.length;i+=2) l.push([+a[i], +a[i+1]]); return l; };
+function areaParaNuvem(a){
+  const o = {nome:a.nome};
+  if(Array.isArray(a.ponto)) o.ponto = a.ponto.map(Number);
+  if(Array.isArray(a.centro)) o.centro = a.centro.map(Number);
+  if(Array.isArray(a.poly)) o.poly = a.poly.reduce((s,p)=>s.concat([+p[0], +p[1]]), []);
+  if(Array.isArray(a.rota)) o.rota = a.rota.reduce((s,p)=>s.concat([+p[0], +p[1]]), []);
+  ['campo','pendente','foco','criadaPor','criadaPorMat','criadaPorFuncao','criadaEm','criadaHora',
+   'auditoriaOrigem','aprovadaPor','aprovadaPorMat','aprovadaEm'].forEach(k=>{
+    if(a[k] !== undefined && a[k] !== null) o[k] = a[k];
+  });
+  return o;
+}
+function areaDaNuvem(o){
+  const a = Object.assign({}, o);
+  if(Array.isArray(o.poly) && o.poly.length) a.poly = paresDe(o.poly);
+  if(Array.isArray(o.rota) && o.rota.length) a.rota = paresDe(o.rota);
+  return a;
+}
 async function baixarAreas(){
   if(!NUVEM.pronta || !firebase.auth().currentUser) return;
   try{
     const q = await FS.collection('areas').get();
     if(q.empty) return;
-    const l = []; q.forEach(d => l.push(d.data()));
-    if(l.length){ AREAS = prepararAreas(l); saveAreas(); }
+    const l = []; q.forEach(d => l.push(areaDaNuvem(d.data())));
+    if(l.length){ AREAS = prepararAreas(l); saveAreas(); if(F) detectarArea(); }
   }catch(e){}
 }
 async function enviarAreaNova(a){
