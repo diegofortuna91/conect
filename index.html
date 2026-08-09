@@ -759,6 +759,7 @@ const FUNCOES = ['Técnico de Segurança do Trabalho','Engenheiro de Segurança'
 /* O.S do contrato. A importação do efetivo sobrescreve esta lista; ela existe
    para o aparelho que ainda não recebeu o arquivo de usuários. */
 const CONTRATOS = ['OS.067 - Facilites','OS.068 - Caldeiraria'];
+const APP_VER = '4.0 · 09/08/2026';   // aparece no diagnóstico e no rodapé do menu
 
 /* ---------- Áreas georreferenciadas (importadas do Google Earth / KML) ---------- */
 /* Demonstração — substituída integralmente ao importar o KML da refinaria. */
@@ -2394,6 +2395,10 @@ function renderHub(){
       <div class="ic" style="background:var(--slate)">📚</div>
       <div class="tx"><b>Procedimentos</b><span>Consultar os documentos do SGI</span></div>
       <div class="rt"><span class="arw">›</span></div>
+    </div>
+    <div style="text-align:center;margin-top:18px;font-size:11px;color:var(--slate2);font-weight:700">
+      Service Conect+ · versão ${APP_VER} ·
+      <a href="#" style="color:inherit" onclick="event.preventDefault();diagnostico()">recursos do aparelho</a>
     </div>`;
 }
 function abrirModulo(id){ if(id==='sms') setView('menu'); }
@@ -2543,6 +2548,7 @@ function diagnostico(){
   const cam = !!(window.FileReader);
   openModal('Recursos do aparelho', `
     <div id="diagBox">
+      ${linhaDiag(true, 'Versão do aplicativo', APP_VER + ' — se estiver diferente da publicada, feche e abra o app com internet')}
       ${linhaDiag(true, 'Onde o app está rodando', c.onde + ' · ' + c.prot)}
       ${linhaDiag(c.seguro, 'Conexão segura (https)',
         c.seguro ? 'GPS e câmera liberados pelo sistema.'
