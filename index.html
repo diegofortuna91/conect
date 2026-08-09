@@ -921,7 +921,12 @@ async function entrarAsync(mat, sen){
 }
 
 function sair(){
-  if(!confirm('Encerrar a sessão?')) return;
+  /* aviso importante para o campo: quem sai da sessão só volta a entrar com internet */
+  const msg = navigator.onLine
+    ? 'Encerrar a sessão?'
+    : 'Você está sem conexão.\n\nAo encerrar a sessão, só será possível entrar de novo '
+      + 'quando houver internet. Encerrar mesmo assim?';
+  if(!confirm(msg)) return;
   sairDaNuvem();
   store.set('sms_usuario','');
   USUARIO=null; document.body.classList.remove('logged');
