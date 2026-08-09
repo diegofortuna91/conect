@@ -814,10 +814,14 @@ async function enviarParaNuvem(reg){
   if(ptFoto) pacotes.push(['pt', ptFoto]);
   (fotos||[]).forEach((f,i)=> pacotes.push(['ev'+i, f]));
   Object.keys(fotosNC||{}).forEach(n => (fotosNC[n]||[]).forEach((f,i)=> pacotes.push(['nc'+n+'-'+i, f])));
+  /* as fotos vão em melhor esforço: se alguma falhar, a auditoria continua enviada */
+  let falhas = 0;
   for(const [k, d] of pacotes){
     if(!d) continue;
-    await doc.collection('fotos').doc(k).set({d:d});
+    try{ await doc.collection('fotos').doc(k).set({d:d}); }
+    catch(e){ falhas++; }
   }
+  if(falhas) console.warn('fotos não enviadas:', falhas);
   return true;
 }
 async function sincronizarNuvem(silencioso){
@@ -827,13 +831,22 @@ async function sincronizarNuvem(silencioso){
     if(!silencioso) toast('Sem conexão com a base — os registros seguem salvos no aparelho');
     return;
   }
-  let n = 0;
+  let n = 0, erro = null;
   for(const r of fila){
     try{ await enviarParaNuvem(r); r.sync = true; n++; }
-    catch(e){ break; }               // offline: o restante fica na fila
+    catch(e){ erro = e; break; }     // guarda o motivo real em vez de chutar "sem conexão"
   }
   if(n){ saveDB(); atualizaContador(); if($('lista').classList.contains('on')) renderLista(); }
-  if(!silencioso) toast(n ? n+' auditoria(s) enviada(s) à base' : 'Sem conexão agora — enviaremos assim que houver sinal');
+  if(silencioso) return;
+  if(n) return toast(n + ' auditoria(s) enviada(s) à base');
+  const cod = (erro && erro.code) || '';
+  if(cod.indexOf('permission-denied')>=0)
+    return toast('A base recusou o envio: sem permissão para esta matrícula. Fale com o administrador.');
+  if(cod.indexOf('unauthenticated')>=0)
+    return toast('Sua sessão expirou. Encerre e entre de novo com a matrícula.');
+  if(cod.indexOf('unavailable')>=0 || cod.indexOf('network')>=0 || !navigator.onLine)
+    return toast('Sem conexão agora — enviaremos assim que houver sinal');
+  toast('Não foi possível enviar: ' + (cod || (erro && erro.message) || 'erro desconhecido'));
 }
 /* ---------- áreas vindas da base ---------- */
 /* O Firestore não aceita lista dentro de lista. Os polígonos viajam achatados
@@ -2441,8 +2454,11 @@ function finalizar(){
   DB.unshift(registro);
   saveDB();
   enviarParaNuvem(registro)
-    .then(ok => { if(ok){ registro.sync = true; saveDB(); atualizaContador(); } })
-    .catch(()=>{});
+    .then(ok => { if(ok){ registro.sync = true; saveDB(); atualizaContador();
+                          if($('lista').classList.contains('on')) renderLista(); } })
+    .catch(e => { const c=(e&&e.code)||'';
+      if(c.indexOf('permission-denied')>=0) toast('A base recusou o envio — verifique o acesso desta matrícula');
+    });
   if(registro.areaNova) enviarAreaNova(registro.areaNova);
   const crit = cl.cls==='crit';
   openModal(TIPOS[TIPO].curto+' registrada', `
