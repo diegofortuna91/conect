@@ -34,7 +34,11 @@ a{color:var(--blue)}
 /* ============ TOPBAR ============ */
 .topbar{
   position:sticky;top:0;z-index:60;background:var(--navy);color:#fff;
-  padding:0 14px;display:flex;align-items:center;gap:12px;height:56px;
+  /* instalado na tela de início o app ocupa a tela toda: a faixa de hora e bateria
+     do iPhone fica por cima da barra. O recuo abaixo devolve esse espaço. */
+  padding:env(safe-area-inset-top) 14px 0;
+  display:flex;align-items:center;gap:12px;
+  height:calc(56px + env(safe-area-inset-top));
   box-shadow:0 2px 12px rgba(14,42,61,.25);
 }
 .brand{display:flex;align-items:center;gap:9px;min-width:0}
@@ -250,7 +254,8 @@ table.dt td.num.z{color:var(--line);font-weight:400}
 .meta-row .pc{font-size:13px;font-weight:800;min-width:74px;text-align:right;font-variant-numeric:tabular-nums}
 
 /* ============ MODAL ============ */
-.modal{position:fixed;inset:0;background:rgba(10,26,37,.72);z-index:200;display:none;align-items:center;justify-content:center;padding:18px}
+.modal{position:fixed;inset:0;background:rgba(10,26,37,.72);z-index:200;display:none;align-items:center;justify-content:center;
+  padding:calc(18px + env(safe-area-inset-top)) 18px calc(18px + env(safe-area-inset-bottom))}
 .modal.on{display:flex}
 .modal-c{background:#fff;border-radius:14px;max-width:820px;width:100%;max-height:92vh;overflow:auto;box-shadow:0 20px 60px rgba(0,0,0,.35)}
 .modal-h{padding:15px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;position:sticky;top:0;background:#fff;z-index:2}
@@ -283,7 +288,7 @@ table.dt td.num.z{color:var(--line);font-weight:400}
 @media print{.topbar,.navbar,.filters,.no-print{display:none!important}}
 /* celular e PDA: a barra superior não pode sobrepor o logotipo */
 @media (max-width:600px){
-  .topbar{padding:0 10px;gap:8px;height:52px}
+  .topbar{padding:env(safe-area-inset-top) 10px 0;gap:8px;height:calc(52px + env(safe-area-inset-top))}
   .brand .txt{display:none}
   .brand .logo-img{height:26px}
   .topnav{gap:2px;padding:3px}
@@ -305,7 +310,9 @@ body.logged #login{display:none}
 
 .lg{
   min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
-  padding:38px 20px;position:relative;overflow:hidden;
+  padding:calc(38px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right))
+          calc(38px + env(safe-area-inset-bottom)) calc(20px + env(safe-area-inset-left));
+  position:relative;overflow:hidden;
   background:
     radial-gradient(1100px 620px at 50% -8%, #24357a 0%, rgba(36,53,122,0) 62%),
     radial-gradient(760px 520px at 92% 108%, #1d6a5a 0%, rgba(29,106,90,0) 58%),
