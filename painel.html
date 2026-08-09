@@ -1475,9 +1475,16 @@ function sessaoNuvem(){
     const fim = firebase.auth().onAuthStateChanged(u => { fim(); resolve(u || null); });
   });
 }
+/* O Firebase exige senha de 6 caracteres ou mais, e as matrículas têm 4 ou 5 dígitos.
+   Para o usuário a senha continua sendo a matrícula: o app completa por baixo dos panos,
+   sempre da mesma forma, tanto ao criar quanto ao entrar. */
+function senhaFB(sen){
+  const s = String(sen||'');
+  return s.length >= 6 ? s : ('sc-' + s);
+}
 async function entrarNaNuvem(mat, senha){
   if(!NUVEM.pronta) throw {code:'sem-nuvem'};
-  const cred = await firebase.auth().signInWithEmailAndPassword(emailDaMatricula(mat), senha);
+  const cred = await firebase.auth().signInWithEmailAndPassword(emailDaMatricula(mat), senhaFB(senha));
   return cred.user;
 }
 async function meuCadastro(mat){
@@ -1489,7 +1496,8 @@ function sairDaNuvem(){ try{ firebase.auth().signOut(); }catch(e){} }
 function msgErroLogin(e){
   const c = (e && e.code) || '';
   if(c.indexOf('wrong-password')>=0 || c.indexOf('invalid-credential')>=0)
-    return 'Senha inválida — a senha inicial é a própria matrícula.';
+    return 'Matrícula ou senha não conferem. A senha inicial é a própria matrícula — '
+         + 'se ainda não foi liberada, peça ao administrador para publicar o efetivo na base.';
   if(c.indexOf('user-not-found')>=0)
     return 'Matrícula ainda não liberada pelo administrador.';
   if(c.indexOf('too-many-requests')>=0)
@@ -1514,8 +1522,10 @@ function primeiroAcesso(mat, sen){
       A matrícula <b>${esc(mat)}</b> ainda não existe na base. Se este é o primeiro acesso do contrato,
       podemos criá-la como <b>administrador</b> — quem importa o efetivo e libera os demais.</div></div>
     <div style="font-size:13.5px;color:var(--slate);line-height:1.6">
-      A senha será a que você acabou de digitar. Guarde-a: é ela que abre o painel.
+      A senha será a que você acabou de digitar — pode ser a própria matrícula. Guarde-a: é ela que abre o painel.
       Depois de importar a planilha, todos os outros entram com <b>matrícula e senha iguais à matrícula</b>.</div>
+    <div class="hint" style="margin-top:10px">Se a matrícula já existir na base, o sistema avisa que o problema
+      é a senha, e nada é criado.</div>
     <div style="display:flex;gap:9px;margin-top:16px">
       <button class="btn btn-p" style="flex:1;justify-content:center"
         onclick="criarAdministrador('${esc(mat)}','${esc(sen).replace(/'/g,"&#39;")}')">Criar administrador</button>
@@ -1523,12 +1533,9 @@ function primeiroAcesso(mat, sen){
     </div>`);
 }
 async function criarAdministrador(mat, sen){
-  if(String(sen||'').length < 6){
-    toast('A senha do administrador precisa de pelo menos 6 caracteres'); return;
-  }
   closeModal();
   try{
-    await firebase.auth().createUserWithEmailAndPassword(emailDaMatricula(mat), sen);
+    await firebase.auth().createUserWithEmailAndPassword(emailDaMatricula(mat), senhaFB(sen));
     const u = {mat, nome:'Administrador do contrato', perfil:'admin', os:'', funcao:'', implantacao:true, nuvem:true};
     store.set('sms_usuario', JSON.stringify(u));
     aplicarSessao(u); aoEntrar();
@@ -1543,6 +1550,19 @@ async function criarAdministrador(mat, sen){
           onclick="closeModal();setVista('admin',document.getElementById('btnAdmin'));abrirImportEfetivo()">Importar o efetivo agora</button>
         <button class="btn" onclick="closeModal()">Depois</button></div>`);
   }catch(e){
+    const cd = (e && e.code) || '';
+    if(cd.indexOf('email-already-in-use')>=0){
+      openModal('Senha incorreta', `
+        <div class="alert al-amber" style="margin-bottom:14px">🔑 <div>A matrícula <b>${esc(mat)}</b>
+          já existe na base — o que não confere é a senha.</div></div>
+        <div style="font-size:13.5px;color:var(--slate);line-height:1.6">
+          Se você é o administrador e esqueceu a senha, dá para redefini-la pelo console do Firebase,
+          em <b>Authentication → Usuários</b>. Para os demais colaboradores, a senha inicial é a
+          <b>própria matrícula</b>.</div>
+        <div style="display:flex;gap:9px;margin-top:14px"><button class="btn btn-p" style="flex:1;justify-content:center"
+          onclick="closeModal()">Entendi</button></div>`);
+      return;
+    }
     toast(msgErroLogin(e));
   }
 }
@@ -1587,7 +1607,7 @@ async function criarAcessos(lista, aoAndar){
     const mat = soDigitos(u.mat); i++;
     if(!mat){ erros++; continue; }
     try{
-      await auth2.createUserWithEmailAndPassword(emailDaMatricula(mat), mat);
+      await auth2.createUserWithEmailAndPassword(emailDaMatricula(mat), senhaFB(mat));
       criados++;
     }catch(e){
       if(String(e.code||'').indexOf('email-already-in-use')>=0) existentes++; else erros++;
@@ -1679,7 +1699,12 @@ async function entrarAsync(mat, sen){
       return;
     }catch(e){
       const cd = (e && e.code) || '';
-      if(cd.indexOf('user-not-found')>=0){ primeiroAcesso(mat, sen); return; }
+      /* O Firebase novo devolve 'invalid-credential' tanto para senha errada quanto para
+         matrícula inexistente. A única forma de distinguir é tentar criar: se já existir,
+         a senha é que estava errada. */
+      if(cd.indexOf('user-not-found')>=0 || cd.indexOf('invalid-credential')>=0 || cd.indexOf('wrong-password')>=0){
+        primeiroAcesso(mat, sen); return;
+      }
       if(cd.indexOf('network')<0 && cd !== 'sem-nuvem'){ toast(msgErroLogin(e)); return; }
     }
   }
