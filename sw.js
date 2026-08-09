@@ -2,7 +2,7 @@
    Guarda o aplicativo inteiro no aparelho. Depois da primeira abertura com internet,
    ele abre e funciona dentro da refinaria mesmo sem sinal nenhum.
    Ao publicar uma versão nova, troque o número do CACHE abaixo. */
-const CACHE = 'conect-v2';
+const CACHE = 'conect-v3';
 const ARQUIVOS = [
   './',
   './index.html',

@@ -1477,7 +1477,8 @@ const ACOES = ['NA - Não Houve Desvio Observado','Correção Imediata pelo Cola
 const PRATICAS = ['NA - Sem Práticas Seguras Observadas','Cumprimento Integral de Procedimento','Uso Correto e Consistente de EPI',
   'Boa Prática Operacional','Organização e Disciplina Operacional','Identificou e Comunicou Risco','Percepção de Risco Adequada'];
 const FUNCOES = ['Técnico de Segurança do Trabalho','Engenheiro de Segurança','Coordenador de SMS','Supervisor','Encarregado','Gerente / Preposto','CIPA / Designado'];
-const CONTRATOS = ['O.S 001 — Sede','O.S 002 — Unidade Industrial','O.S 003 — Manutenção Industrial'];
+/* O.S do contrato. A importação do efetivo sobrescreve esta lista. */
+const CONTRATOS = ['OS.067 - Facilites','OS.068 - Caldeiraria'];
 
 /* ---------- Áreas georreferenciadas (importadas do Google Earth / KML) ---------- */
 /* Demonstração — substituída integralmente ao importar o KML da refinaria. */
@@ -1671,12 +1672,21 @@ function areasNovas(){
   DB.forEach(r=>{
     const n = ((r.areaNova && r.areaNova.nome) || r.area || '').trim();
     if(!n || conhecidas.has(n)) return;
-    const e = m[n] || (m[n] = {nome:n, n:0, pts:[], por:'', data:'', contratos:new Set()});
+    const e = m[n] || (m[n] = {nome:n, n:0, pts:[], por:'', mat:'', funcao:'', data:'', hora:'',
+                                auditoria:'', contratos:new Set()});
     e.n++; if(r.contrato) e.contratos.add(r.contrato);
     const g = (r.areaNova && r.areaNova.lat!=null) ? [+r.areaNova.lat, +r.areaNova.lng]
             : (r.gps && r.gps.lat!=null ? [+r.gps.lat, +r.gps.lng] : null);
     if(g && isFinite(g[0]) && isFinite(g[1])) e.pts.push(g);
-    if(!e.data || r.data > e.data){ e.data = r.data; e.por = (r.areaNova&&r.areaNova.por) || r.auditor || ''; }
+    /* guarda quem registrou primeiro — é o responsável pela inclusão da área */
+    if(!e.data || r.data < e.data){
+      e.data = r.data;
+      e.por   = (r.areaNova&&r.areaNova.por) || r.auditor || '';
+      e.mat   = (r.areaNova&&r.areaNova.mat) || r.matricula || '';
+      e.funcao= (r.areaNova&&r.areaNova.funcao) || r.funcao || '';
+      e.hora  = (r.areaNova&&r.areaNova.hora) || r.horaIni || '';
+      e.auditoria = r.id || '';
+    }
   });
   return Object.values(m).sort((a,b)=>b.n-a.n);
 }
@@ -1688,7 +1698,10 @@ function medianaPontos(pts){
 function cadastrarAreaNova(nome){
   const a = areasNovas().find(x=>x.nome===nome); if(!a) return;
   const ponto = medianaPontos(a.pts);
-  const nova = {nome:a.nome, campo:true};
+  const nova = {nome:a.nome, campo:true,
+    criadaPor:a.por, criadaPorMat:a.mat, criadaPorFuncao:a.funcao,
+    criadaEm:a.data, criadaHora:a.hora, auditoriaOrigem:a.auditoria,
+    aprovadaPor:(USUARIO&&USUARIO.nome)||'', aprovadaPorMat:(USUARIO&&USUARIO.mat)||'', aprovadaEm:hojeISO()};
   if(ponto) nova.ponto = ponto;
   AREAS = prepararAreas([...AREAS, nova]);
   saveAreas();
@@ -1708,7 +1721,9 @@ function blocoAreasNovas(){
       Inclua para que apareçam no mapa, na lista do aplicativo e na base de cálculo do OAL e do 5S.</div></div>
     ${l.map(a=>`<div class="orig" style="cursor:default">
       <div class="tx"><b>${esc(a.nome)}</b>
-        <span>${a.n} auditoria(s) · última em ${fmtD(a.data)}${a.por?' por '+esc(a.por):''}</span>
+        <span>👤 incluída por <b>${esc(a.por||'—')}</b>${a.mat?' · mat. '+esc(a.mat):''}${a.funcao?' · '+esc(a.funcao):''}</span>
+        <span>${a.n} auditoria(s) · primeiro registro em ${fmtD(a.data)}${a.hora?' às '+esc(a.hora):''}${
+          a.auditoria?' · '+esc(a.auditoria):''}</span>
         <span>${a.pts.length ? '📍 posição de GPS registrada ('+a.pts.length+' leitura(s))' : '⚠ sem coordenada — entrará sem posição no mapa'}${
           a.contratos.size?' · '+[...a.contratos].join(', '):''}</span></div>
       <div style="display:flex;gap:7px">
@@ -1733,7 +1748,10 @@ function abrirImportKML(){
         Áreas cadastradas atualmente (${AREAS.length})${AREAS.some(a=>a.demo)?' — dados de exemplo':''}</div>
       ${AREAS.map(a=>`<div style="font-size:13px;padding:5px 0;border-bottom:1px solid var(--line2);display:flex;gap:9px">
         <span>${a.poly?'▦':a.rota?'〰':'📍'}</span><span style="flex:1">${esc(a.nome)}${
-          a.campo?' <span class="badge b-pont" style="font-size:9.5px">incluída em campo</span>':''}</span>
+          a.campo?` <span class="badge b-pont" style="font-size:9.5px">incluída em campo</span>
+            <div style="font-size:11px;color:var(--slate2);font-weight:600;margin-top:2px">
+              por ${esc(a.criadaPor||'—')}${a.criadaPorMat?' (mat. '+esc(a.criadaPorMat)+')':''}${
+              a.criadaEm?' em '+fmtD(a.criadaEm):''}${a.aprovadaPor?' · aprovada por '+esc(a.aprovadaPor):''}</div>`:''}</span>
         <span style="color:var(--slate2);font-size:11.5px">${a.poly?a.poly.length+' vértices':a.rota?'rota':(a.ponto?'ponto':'sem coordenada')}</span></div>`).join('')}
     </div>`);
 }
@@ -4272,6 +4290,31 @@ function renderUsuarios(){
   ${!temAdmin() && USUARIOS.length ? `<div class="alert al-red" style="margin-bottom:14px">🔑
     <div><b>Nenhum administrador definido.</b> Enquanto isso, qualquer matrícula entra como administrador.
     <a href="#" onclick="event.preventDefault();definirAdministrador()">Definir agora</a></div></div>` : ''}
+  ${(()=>{ const ac = AREAS.filter(a=>a.campo); const pend = areasNovas().filter(a=>AREAS_IGNORADAS.indexOf(a.nome)<0);
+      if(!ac.length && !pend.length) return '';
+      return `<div class="card" style="margin-bottom:14px">
+        <div class="card-h"><h3>Áreas incluídas em campo</h3>
+          <span class="sub">${ac.length} no cadastro${pend.length?' · '+pend.length+' aguardando aprovação':''}</span>
+          <div class="map-tools no-print"><button class="btn btn-sm" onclick="abrirImportKML()">🗺 Gerenciar áreas</button></div></div>
+        <div class="tbl-wrap"><table class="dt">
+          <thead><tr><th>Área</th><th>Quem incluiu</th><th>Quando</th><th>Situação</th></tr></thead>
+          <tbody>
+          ${pend.map(a=>`<tr>
+            <td><b>${esc(a.nome)}</b><div class="sub2">${a.pts.length?'📍 com posição de GPS':'⚠ sem coordenada'}</div></td>
+            <td>${esc(a.por||'—')}<div class="sub2">${a.mat?'Mat. '+esc(a.mat):''}${a.funcao?' · '+esc(a.funcao):''}</div></td>
+            <td>${fmtD(a.data)}${a.hora?'<div class="sub2">'+esc(a.hora)+'</div>':''}</td>
+            <td><span class="badge b-sist">aguardando aprovação</span>
+              <div style="margin-top:5px"><button class="btn btn-sm btn-p" onclick="cadastrarAreaNova('${esc(a.nome).replace(/'/g,'&#39;')}')">Incluir</button></div></td>
+          </tr>`).join('')}
+          ${ac.map(a=>`<tr>
+            <td><b>${esc(a.nome)}</b><div class="sub2">${a.ponto?'📍 com posição':'sem coordenada'}</div></td>
+            <td>${esc(a.criadaPor||'—')}<div class="sub2">${a.criadaPorMat?'Mat. '+esc(a.criadaPorMat):''}${
+                a.criadaPorFuncao?' · '+esc(a.criadaPorFuncao):''}</div></td>
+            <td>${a.criadaEm?fmtD(a.criadaEm):'—'}${a.criadaHora?'<div class="sub2">'+esc(a.criadaHora)+'</div>':''}</td>
+            <td><span class="badge b-sem">no cadastro</span>
+              <div class="sub2">${a.aprovadaPor?'aprovada por '+esc(a.aprovadaPor)+(a.aprovadaEm?' em '+fmtD(a.aprovadaEm):''):''}</div></td>
+          </tr>`).join('')}
+          </tbody></table></div></div>`; })()}
   ${CONTRATOS_BASE.length ? `<div class="card" style="margin-bottom:14px">
     <div class="card-h"><h3>Contratos / O.S do efetivo</h3>
       <span class="sub">${CONTRATOS_BASE.length} contrato(s) na base</span></div>
