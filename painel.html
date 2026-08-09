@@ -1269,6 +1269,7 @@ if('serviceWorker' in navigator){
     </div>
   </div>
 
+  <div id="avisoDemo"></div>
   <div id="escopoAviso"></div>
   <div id="filtroAtivo"></div>
   <div id="pulso"></div>
@@ -2207,13 +2208,40 @@ function closeModal(){ $('modal').classList.remove('on'); }
    ===================================================================== */
 let DB = [];
 function saveDB(){ store.set('sms_auditorias', JSON.stringify(DB)); }
+/* Em operação real o painel não gera mais nada de exemplo: só o que veio do campo. */
+let SEM_DEMO = store.get('sms_sem_demo') === '1';
 function loadDB(){
   const raw = store.get('sms_auditorias'), v = store.get('sms_dados_ver');
-  if(raw && v===DADOS_VER){ try{ DB = JSON.parse(raw); if(DB.length) return; }catch(e){} }
+  if(raw && (v===DADOS_VER || SEM_DEMO)){ try{ DB = JSON.parse(raw); if(DB.length || SEM_DEMO) return; }catch(e){} }
+  if(SEM_DEMO){ DB = []; return; }
   regerarDemo();
+}
+function entrarEmOperacao(){
+  openModal('Começar a operação real', `
+    <div class="alert al-amber" style="margin-bottom:14px">🚦 <div>
+      Isto apaga <b>todos os dados de demonstração</b> do painel. Ficam apenas as auditorias
+      registradas de verdade pelo aplicativo de campo — e daqui em diante nada de exemplo é gerado.</div></div>
+    <div style="font-size:13.5px;color:var(--slate);line-height:1.6">
+      Os indicadores, as metas e o gráfico Previsto × Realizado passam a refletir só o real.
+      No começo do mês os números ficam baixos mesmo: é o retrato verdadeiro do contrato.</div>
+    <div style="display:flex;gap:9px;margin-top:16px">
+      <button class="btn btn-p" style="flex:1;justify-content:center" onclick="confirmarOperacao()">Apagar exemplos e começar</button>
+      <button class="btn" onclick="closeModal()">Cancelar</button></div>`);
+}
+function confirmarOperacao(){
+  SEM_DEMO = true; store.set('sms_sem_demo','1');
+  DB = DB.filter(r=>r.origem === 'campo');
+  saveDB(); closeModal(); renderSMS();
+  toast('Operação real — o painel agora mostra apenas auditorias do campo');
+}
+function voltarDemonstracao(){
+  SEM_DEMO = false; store.set('sms_sem_demo','');
+  regerarDemo(); renderSMS(); closeModal();
+  toast('Dados de demonstração recarregados');
 }
 function regerarDemo(){
   const meus = (()=>{ try{ return (JSON.parse(store.get('sms_auditorias')||'[]')||[]).filter(r=>r && r.origem==='campo'); }catch(e){ return []; } })();
+  if(SEM_DEMO){ DB = meus; saveDB(); return; }
   DB = [...meus, ...seed()].sort((a,b)=> a.data<b.data?1:-1);
   store.set('sms_dados_ver', DADOS_VER); saveDB();
 }
@@ -3166,6 +3194,14 @@ function renderSMS(){
   $('dashSub').textContent = `${rows.length} auditoria(s) · ${rotuloPeriodo()}`
     + ` · atualizado em ${fmtD(hojeISO())}`;
 
+  const _demo = $('avisoDemo');
+  if(_demo){
+    const nDemo = DB.filter(r=>r.origem !== 'campo').length;
+    _demo.innerHTML = (!SEM_DEMO && nDemo) ? `<div class="alert al-amber" style="margin-bottom:14px">🧪
+      <div><b>Painel em demonstração.</b> ${nDemo} auditoria(s) de exemplo estão somando nos indicadores.
+      Quando a equipe começar a registrar de verdade,
+      <a href="#" onclick="event.preventDefault();entrarEmOperacao()">apague os exemplos e entre em operação real</a>.</div></div>` : '';
+  }
   const _ea = $('escopoAviso');
   if(_ea){
     const nvs = areasNovas().filter(a=>AREAS_IGNORADAS.indexOf(a.nome)<0);
@@ -5227,7 +5263,12 @@ function abrirImportCampo(){
     <input type="file" id="jsonFile" accept=".json,application/json" style="display:none" onchange="importarCampo(this)">
     <div id="impRes" style="margin-top:14px"></div>
     <div style="margin-top:14px;border-top:1px solid var(--line2);padding-top:13px">
-      <button class="btn btn-sm" onclick="if(confirm('Recarregar os dados de demonstração? As auditorias importadas do campo são preservadas.')){regerarDemo();renderSMS();closeModal();toast('Dados de demonstração recarregados');}">↻ Recarregar dados de demonstração</button>
+      ${SEM_DEMO
+        ? `<button class="btn btn-sm" onclick="voltarDemonstracao()">↻ Voltar aos dados de demonstração</button>
+           <div class="hint" style="margin-top:8px">O painel está em <b>operação real</b>: mostra somente auditorias do campo.</div>`
+        : `<button class="btn btn-sm btn-p" onclick="entrarEmOperacao()">🚦 Começar a operação real (apagar exemplos)</button>
+           <div class="hint" style="margin-top:8px">Use quando a equipe começar a registrar de verdade — os dados de
+             exemplo somem e os indicadores passam a mostrar só o que foi feito.</div>`}
     </div>
     <div class="alert al-blue" style="margin-top:16px">ℹ️ <div>Etapa exclusiva do protótipo. Com o Firebase ativo,
       cada auditoria chega ao Painel segundos após o envio no campo, sem nenhuma ação manual.</div></div>`);
