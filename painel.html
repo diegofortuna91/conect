@@ -2194,7 +2194,7 @@ const CLSCOR = {crit:'#c8412f', sist:'#d9a521', pont:'#2b6ea8', sem:'#2f8f6b'};
 const $ = id => document.getElementById(id);
 const esc = s => String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const pad = n => String(n).padStart(2,'0');
-const fmtD = iso => { const [y,m,d]=iso.split('-'); return `${d}/${m}/${y}`; };
+const fmtD = iso => { if(!iso) return '—'; const [y,m,d]=String(iso).split('-'); return d ? `${d}/${m}/${y}` : String(iso); };
 const mesLbl = ym => { const [y,m]=ym.split('-'); return ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][+m-1]+'/'+y.slice(2); };
 const uid = () => 'AC-'+Date.now().toString(36).toUpperCase()+'-'+Math.floor(Math.random()*900+100);
 function toast(msg){ const t=$('toast'); t.textContent=msg; t.classList.add('on'); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('on'),2600); }
@@ -3692,7 +3692,7 @@ const CADENCIA = {   // auditorias exigidas por dia disponível, por checklist e
 const GRUPO_META = {gerencia:'Gerência / Preposto', sesmt:'Setor de SMS (SESMT)',
                     campo:'Supervisor / Encarregado', cipa:'CIPA / Designado'};
 const TIPOS_AFAST = ['Férias','INSS / Afastamento','Atestado','Treinamento','Suspensão','Outro'];
-const dias = (a,b) => Math.max(0, Math.round((new Date(b+'T12:00:00') - new Date(a+'T12:00:00'))/86400000) + 1);
+const dias = (a,b) => (!a||!b) ? 0 : Math.max(0, Math.round((new Date(b+'T12:00:00') - new Date(a+'T12:00:00'))/86400000) + 1);
 const maiorData = (a,b) => a>b?a:b, menorData = (a,b) => a<b?a:b;
 function sobrepoe(ini,fim,de,ate){
   if(!de && !ate) return 0;
@@ -4453,27 +4453,87 @@ function acharUsuario(mat){
   return USUARIOS.find(u=>soDigitos(u.mat)===m && m!=='') || null;
 }
 /* perfil sugerido a partir da função descrita na lista de efetivo */
+/* A planilha nova usa abreviações: Enc., Sup., Téc., Coord., Insp. */
 function perfilPorFuncao(f){
   const t = (f||'').toLowerCase();
-  if(/(gerente|preposto|diretor)/.test(t)) return 'gerencia';
-  if(/(coorden|sesmt|\bsms\b|enfermeir|m[ée]dico do trabalho)/.test(t)) return 'sesmt';
+  if(/(gerente|ger\.|preposto|diretor)/.test(t)) return 'gerencia';
+  if(/(coorden|coord\.|sesmt|\bsms\b|enfermeir|m[ée]dico do trabalho)/.test(t)) return 'sesmt';
   if(/seguran/.test(t)) return /observador/.test(t) ? 'campo' : 'sesmt';
-  if(/(supervisor|encarregad|mestre|l[íi]der|lider|inspetor|apontador|cipa|planejador)/.test(t)) return 'campo';
+  if(/(supervisor|sup\.|encarregad|enc\.|mestre|l[íi]der|lider|inspetor|insp\.|apontador|cipa|planejador|t[ée]c\.\s*de\s*seg)/.test(t))
+    return 'campo';
   return 'nenhum';
 }
-const ativoNaLista = st => /^ativ/i.test(String(st||'').trim());
+/* "Enc. de Caldeiraria (Interino)" já entra marcado como interinidade em aberto */
+const funcaoInterina = f => /\(\s*interino\s*\)/i.test(String(f||''));
+/* Férias, INSS e atestado NÃO tiram a pessoa do efetivo — ela continua ativa e ganha
+   um afastamento, que desconta a meta no período. Só demissão e transferência inativam. */
+const ativoNaLista = st => !/^(demit|desli|transf|rescis|afast\. definit)/i.test(String(st||'').trim());
+const AFASTA_STATUS = st => {
+  const t = String(st||'').trim().toLowerCase();
+  if(/f[ée]rias/.test(t)) return 'Férias';
+  if(/inss|afast/.test(t)) return 'INSS / Afastamento';
+  if(/atestad/.test(t)) return 'Atestado';
+  if(/suspens/.test(t)) return 'Suspensão';
+  if(/treinam/.test(t)) return 'Treinamento';
+  return null;
+};
+/* datas do Excel chegam como número de série */
+function serialParaISO(v){
+  if(v == null || v === '') return null;
+  if(typeof v === 'string'){
+    const m = v.match(/^(\d{4})-(\d{2})-(\d{2})/); if(m) return m[0];
+    const b = v.match(/^(\d{2})\/(\d{2})\/(\d{4})/); if(b) return b[3]+'-'+b[2]+'-'+b[1];
+    if(!/^\d+(\.\d+)?$/.test(v)) return null;
+  }
+  const n = Math.floor(+v);
+  if(!isFinite(n) || n < 20000 || n > 80000) return null;      // fora de 1954–2119: não é data
+  const d = new Date(Date.UTC(1899,11,30) + n*86400000);
+  return d.toISOString().slice(0,10);
+}
+function somaDiasISO(iso, n){
+  const d = new Date(iso+'T12:00:00'); d.setDate(d.getDate()+n);
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+}
 
 /* ---------- leitura de planilha: .xlsx (zip + inflate nativo) e .csv ---------- */
-async function lerPlanilha(file){
+/* A planilha do RH tem várias abas. A que interessa é a E_Efetivo — o leitor
+   procura pelo nome e só cai na primeira aba se não encontrar. */
+function relacoesDoArquivo(xml){
+  const m = {};
+  (xml||'').replace(/<Relationship\b[^>]*>/g, tag=>{
+    const id = (tag.match(/Id="([^"]+)"/)||[])[1], alvo = (tag.match(/Target="([^"]+)"/)||[])[1];
+    if(id && alvo) m[id] = alvo.replace(/^\/?xl\//,'').replace(/^\//,'');
+    return tag;
+  });
+  return m;
+}
+function abasDoWorkbook(wbxml, rels){
+  const l = [];
+  (wbxml||'').replace(/<sheet\b[^>]*>/g, tag=>{
+    const nome = (tag.match(/name="([^"]*)"/)||[])[1];
+    const rid  = (tag.match(/r:id="([^"]*)"/)||[])[1];
+    if(nome && rid && rels[rid]) l.push({nome, caminho:'xl/' + rels[rid]});
+    return tag;
+  });
+  return l;
+}
+async function lerPlanilha(file, preferida){
   const nome = file.name.toLowerCase();
   if(nome.endsWith('.csv') || nome.endsWith('.txt')) return lerCSV(await file.text());
   const buf = new Uint8Array(await file.arrayBuffer());
   const arqs = await descompactarZip(buf);
-  const sheet  = arqs['xl/worksheets/sheet1.xml'];
-  if(!sheet) throw new Error('Não encontrei a primeira planilha dentro do arquivo.');
   const shared = arqs['xl/sharedStrings.xml'] ? textosCompartilhados(arqs['xl/sharedStrings.xml']) : [];
+  const abas = abasDoWorkbook(arqs['xl/workbook.xml'], relacoesDoArquivo(arqs['xl/_rels/workbook.xml.rels']));
+  ABAS_LIDAS = abas.map(a=>a.nome);
+  let alvo = null;
+  const rx = preferida ? new RegExp('^'+preferida.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'$','i') : /^e_?\s*efetivo$/i;
+  alvo = abas.find(a=>rx.test(a.nome)) || abas.find(a=>/efetivo/i.test(a.nome)) || abas[0];
+  const sheet = (alvo && arqs[alvo.caminho]) || arqs['xl/worksheets/sheet1.xml'];
+  if(!sheet) throw new Error('Não encontrei nenhuma planilha dentro do arquivo.');
+  ABA_USADA = alvo ? alvo.nome : 'planilha 1';
   return lerSheetXML(sheet, shared);
 }
+let ABAS_LIDAS = [], ABA_USADA = '';
 async function inflar(bytes, metodo){
   if(metodo === 0) return bytes;
   const ds = new DecompressionStream('deflate-raw');
@@ -4495,7 +4555,9 @@ async function descompactarZip(buf){
     const nomeArq = dec.decode(buf.subarray(off+46, off+46+nl));
     const lnl = dv.getUint16(lho+26,true), lel = dv.getUint16(lho+28,true);
     const ini = lho+30+lnl+lel;
-    if(/^xl\/(worksheets\/sheet1|sharedStrings)\.xml$/.test(nomeArq)){
+    /* precisa de todas as abas, do workbook e das relações — a planilha do RH
+       tem várias abas e a que interessa é a E_Efetivo, não a primeira */
+    if(/^xl\/(worksheets\/sheet\d+\.xml|sharedStrings\.xml|workbook\.xml|_rels\/workbook\.xml\.rels)$/.test(nomeArq)){
       out[nomeArq] = dec.decode(await inflar(buf.subarray(ini, ini+tamComp), metodo));
     }
     off += 46+nl+el+cl;
@@ -4632,7 +4694,7 @@ function linhaUsuario(u){
   const i = USUARIOS.indexOf(u), hj = hojeISO();
   const af = afastadoEm(u, hj), pr = af ? null : proximoAfast(u, hj);
   const marcaAf = af
-    ? `<div class="marca af">🛑 ${esc(af.tipo)} até ${fmtD(af.ate)} · fora da meta</div>`
+    ? `<div class="marca af">🛑 ${esc(af.tipo)} ${af.ate?('até '+fmtD(af.ate)):'sem previsão de retorno'} · fora da meta</div>`
     : (pr ? `<div class="marca man">📅 ${esc(pr.tipo)} a partir de ${fmtD(pr.de)}</div>` : '');
   return `<tr>
     <td><b style="font-variant-numeric:tabular-nums">${esc(u.mat)}</b></td>
@@ -4786,17 +4848,17 @@ function edAfastHTML(){
     const vig = a.de<=hj && (a.ate||'9999-12-31')>=hj, fut = a.de>hj;
     return `<div class="rev-row" style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
       <span class="badge ${vig?'b-crit':(fut?'b-pont':'b-sem')}">${esc(a.tipo||'Afastamento')}</span>
-      <span class="v" style="flex:1;min-width:170px">${fmtD(a.de)} a ${fmtD(a.ate)} · ${dias(a.de,a.ate)} dia(s)${
+      <span class="v" style="flex:1;min-width:170px">${fmtD(a.de)} ${a.ate?('a '+fmtD(a.ate)+' · '+dias(a.de,a.ate)+' dia(s)'):'· sem previsão de retorno'}${
         vig?' · <b>em curso</b>':(fut?' · programado':'')}</span>
       <button class="btn btn-sm" onclick="edRmAfast(${j})">remover</button></div>`;
   }).join('');
 }
 function edAddAfast(){
   const t=$('afTipo').value, de=$('afDe').value, ate=$('afAte').value;
-  if(!de || !ate){ toast('Informe o período do afastamento'); return; }
-  if(ate < de){ toast('A data final não pode ser anterior à inicial'); return; }
-  ED_AFAST.push({tipo:t, de:de, ate:ate});
-  ED_AFAST.sort((a,b)=>a.de.localeCompare(b.de));
+  if(!de){ toast('Informe a data de início do afastamento'); return; }
+  if(ate && ate < de){ toast('A data final não pode ser anterior à inicial'); return; }
+  ED_AFAST.push({tipo:t, de:de, ate:ate || null});   // sem data final = sem previsão de retorno
+  ED_AFAST.sort((a,b)=>String(a.de||'').localeCompare(String(b.de||'')));
   $('edAfastLista').innerHTML = edAfastHTML();
   $('afDe').value=''; $('afAte').value='';
 }
@@ -4860,7 +4922,8 @@ function editarUsuario(i){
           <div><label class="fl">Tipo</label>
             <select class="inp" id="afTipo">${TIPOS_AFAST.map(t=>`<option>${t}</option>`).join('')}</select></div>
           <div><label class="fl">De</label><input class="inp" type="date" id="afDe"></div>
-          <div><label class="fl">Até</label><input class="inp" type="date" id="afAte"></div>
+          <div><label class="fl">Até <span style="font-weight:600;color:var(--slate2)">(opcional)</span></label>
+            <input class="inp" type="date" id="afAte" title="Deixe em branco quando não há previsão de retorno"></div>
           <button class="btn btn-p" style="height:38px" onclick="edAddAfast()">+ Incluir</button>
         </div>
       </div>
@@ -4957,12 +5020,12 @@ function promoverAdmin(i){
 function abrirImportEfetivo(){
   openModal('Importar lista de efetivo', `
     <p style="font-size:13.5px;color:var(--slate);margin:0 0 14px;line-height:1.55">
-      Selecione a planilha de <b>Controle do Efetivo</b> (.xlsx ou .csv). O sistema localiza sozinho as colunas
+      Selecione a planilha de <b>Controle do Efetivo</b> (.xlsx, .xlsm ou .csv). Se houver a aba <b>E_Efetivo</b>, é ela que será lida. O sistema localiza sozinho as colunas
       de <b>matrícula</b>, <b>nome</b>, <b>função</b>, <b>O.S</b> e <b>status</b>, e sugere o perfil de acesso pela função.</p>
     <div class="photo-slot" onclick="document.getElementById('efFile').click()">
       <div class="ico">📄</div><div class="t">Selecionar planilha</div>
       <div class="s">Somente matrícula, nome, função, O.S e situação são importados</div></div>
-    <input type="file" id="efFile" accept=".xlsx,.csv,.txt" style="display:none" onchange="lerEfetivo(this)">
+    <input type="file" id="efFile" accept=".xlsx,.xlsm,.csv,.txt" style="display:none" onchange="lerEfetivo(this)">
     <div id="efRes" style="margin-top:14px"></div>
     <div class="alert al-amber" style="margin-top:16px">🔒 <div>CPF, PIS, data de nascimento, telefone, endereço e e-mail
       <b>não são importados</b>. O sistema guarda apenas o necessário para identificar quem fez a auditoria.</div></div>`);
@@ -4974,24 +5037,55 @@ async function lerEfetivo(inp){
     const linhas = await lerPlanilha(f);
     const det = detectarColunas(linhas);
     if(det.mat==null && det.mapa.mat==null) throw new Error('Não localizei a coluna de matrícula.');
+    /* colunas extras da planilha nova: início das férias, início do INSS e retorno */
+    const cab = linhas[det.linha].map(c=>String(c||'').trim().toLowerCase());
+    const acha = rx => { const i = cab.findIndex(c=>rx.test(c)); return i<0 ? null : i; };
+    const cFerias  = acha(/^f[ée]rias$/), cINSS = acha(/^inss$/), cRetorno = acha(/retorno\s*inss/);
+    const hoje = hojeISO();
     const dados = [];
     for(let i=det.linha+1;i<linhas.length;i++){
       const L = linhas[i];
       const mat = (L[det.mapa.mat]||'').trim(), nome = (L[det.mapa.nome]||'').trim();
       if(!mat || !nome) continue;
-      dados.push({mat, nome, funcao:(L[det.mapa.funcao]||'').trim(),
-                  os:(L[det.mapa.os]||'').trim(), status:(L[det.mapa.status]||'').trim()});
+      const status = (L[det.mapa.status]||'').trim();
+      const d = {mat, nome, funcao:(L[det.mapa.funcao]||'').trim(),
+                 os:(L[det.mapa.os]||'').trim(), status};
+      /* Status vira afastamento com data, para a meta do mês descontar sozinha */
+      const tipo = AFASTA_STATUS(status);
+      if(tipo){
+        let de = null, ate = null;
+        if(/f[ée]rias/i.test(tipo) && cFerias!=null) de = serialParaISO(L[cFerias]);
+        if(/inss/i.test(tipo)){
+          if(cINSS!=null) de = serialParaISO(L[cINSS]);
+          if(cRetorno!=null) ate = serialParaISO(L[cRetorno]);
+        }
+        if(!de) de = hoje;
+        if(/f[ée]rias/i.test(tipo) && !ate) ate = somaDiasISO(de, 29);   // período padrão de 30 dias
+        if(ate && ate < hoje) ate = null;                                 // ainda afastado: deixa em aberto
+        d.afastamentos = [{tipo, de, ate, origem:'planilha'}];
+      }
+      if(funcaoInterina(d.funcao)) d.interino = true;
+      dados.push(d);
     }
     if(!dados.length) throw new Error('Nenhuma linha com matrícula e nome foi encontrada.');
     IMPORT_PREVIA = dados;
     const porPerfil = {};
     dados.filter(d=>ativoNaLista(d.status)).forEach(d=>{ const p=perfilPorFuncao(d.funcao); porPerfil[p]=(porPerfil[p]||0)+1; });
-    const cab = Object.keys(det.mapa).map(k=>`<span class="fchip">${k}: <b>${esc(linhas[det.linha][det.mapa[k]]||'?')}</b></span>`).join('');
+    const chips = Object.keys(det.mapa).map(k=>`<span class="fchip">${k}: <b>${esc(linhas[det.linha][det.mapa[k]]||'?')}</b></span>`).join('');
+    const nAf = dados.filter(d=>d.afastamentos).length;
+    const nInt = dados.filter(d=>d.interino).length;
+    const nFora = dados.filter(d=>!ativoNaLista(d.status)).length;
     $('efRes').innerHTML = `
-      <div class="alert al-green">✅ <div><b>${dados.length} pessoa(s) lida(s)</b> · cabeçalho na linha ${det.linha+1}</div></div>
+      <div class="alert al-green">✅ <div><b>${dados.length} pessoa(s) lida(s)</b> na aba
+        <b>${esc(ABA_USADA||'planilha 1')}</b> · cabeçalho na linha ${det.linha+1}${
+        ABAS_LIDAS.length>1?`<br><span style="font-size:11.5px">abas do arquivo: ${ABAS_LIDAS.map(esc).join(' · ')}</span>`:''}</div></div>
+      ${nAf||nFora||nInt ? `<div class="alert al-blue" style="margin-top:10px">📋 <div>
+        ${nAf?`<b>${nAf}</b> pessoa(s) com afastamento pelo Status (férias, INSS) — já entram com o período lançado e saem da meta enquanto durar.<br>`:''}
+        ${nInt?`<b>${nInt}</b> em função de interinidade.<br>`:''}
+        ${nFora?`<b>${nFora}</b> desligado(s)/transferido(s) — entram como inativos, sem acesso.`:''}</div></div>` : ''}
       <div style="margin:12px 0"><div class="lb" style="font-size:11px;font-weight:800;color:var(--slate2);
         text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px">Colunas identificadas</div>
-        <div style="display:flex;gap:7px;flex-wrap:wrap">${cab}</div></div>
+        <div style="display:flex;gap:7px;flex-wrap:wrap">${chips}</div></div>
       <div class="lb" style="font-size:11px;font-weight:800;color:var(--slate2);text-transform:uppercase;
         letter-spacing:.05em;margin-bottom:7px">Perfis sugeridos entre os ativos</div>
       ${Object.keys(PERFIS).filter(k=>porPerfil[k]).map(k=>`<div class="meta-row" style="padding:7px 0">
@@ -5011,11 +5105,14 @@ function confirmarImport(){
     const a = antes[soDigitos(d.mat)];
     const sug = perfilPorFuncao(d.funcao);
     const novo = {mat:d.mat, nome:d.nome, funcao:d.funcao, os:d.os, ativo:ativoNaLista(d.status),
-                  perfil:sug, perfilBase:sug};
+                  perfil:sug, perfilBase:sug, situacao:d.status||''};
+    if(d.afastamentos) novo.afastamentos = d.afastamentos.map(x=>({tipo:x.tipo, de:x.de, ate:x.ate}));
     if(a){   // reimportar a planilha não pode apagar ajuste manual, interinidade nem afastamentos
       if(a.manual || a.interinoAte){ novo.perfil = a.perfil; novo.manual = a.manual;
         novo.interinoAte = a.interinoAte; novo.interinoDe = a.interinoDe; }
-      novo.afastamentos = a.afastamentos || [];
+      /* mantém o que foi lançado à mão no painel e atualiza o que veio da planilha */
+      const manuais = (a.afastamentos||[]).filter(x=>x.origem!=='planilha');
+      novo.afastamentos = manuais.concat(novo.afastamentos||[]);
       novo.obs = a.obs; novo.hist = a.hist;
       if(a.funcao && d.funcao && a.funcao !== d.funcao && !a.interinoAte){
         novo.perfil = sug; novo.manual = false;   // mudou de função na planilha: volta ao sugerido
