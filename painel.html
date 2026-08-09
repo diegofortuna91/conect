@@ -1582,6 +1582,10 @@ const AREAS_REFINARIA = [
 const DADOS_VER = '8-20-meses';   // muda quando o catálogo embutido muda: força recarga
 let AREAS = [];
 let AREAS_IGNORADAS = (()=>{ try{ return JSON.parse(store.get('sms_areas_ign')||'[]')||[]; }catch(e){ return []; } })();
+/* lixeira de áreas: guarda o objeto inteiro para permitir restaurar,
+   e impede que uma reimportação do KML traga de volta o que o admin removeu */
+let AREAS_EXCLUIDAS = (()=>{ try{ return JSON.parse(store.get('sms_areas_lixo')||'[]')||[]; }catch(e){ return []; } })();
+function salvarExcluidas(){ store.set('sms_areas_lixo', JSON.stringify(AREAS_EXCLUIDAS)); }
 function centroide(poly){ const n=poly.length; return [poly.reduce((a,p)=>a+p[0],0)/n, poly.reduce((a,p)=>a+p[1],0)/n]; }
 function prepararAreas(list){
   list.forEach(a=>{ if(a.poly&&a.poly.length) a.centro=centroide(a.poly); });
@@ -1732,6 +1736,61 @@ function blocoAreasNovas(){
     </div>`).join('')}
     <div style="border-top:1px solid var(--line2);margin:14px 0"></div>`;
 }
+function excluirArea(nome){
+  if(!ehAdmin()){ toast('Somente o administrador pode excluir áreas'); return; }
+  const a = AREAS.find(x=>x.nome===nome); if(!a) return;
+  const usos = DB.filter(r=>r.area===nome).length;
+  openModal('Excluir área', `
+    <div class="alert al-amber" style="margin-bottom:14px">⚠ <div>
+      Você vai remover <b>${esc(nome)}</b> do cadastro. Ela deixa de aparecer no mapa,
+      na lista do aplicativo de campo e na base de cálculo do OAL e do 5S.</div></div>
+    ${usos ? `<div class="alert al-blue" style="margin-bottom:14px">📋 <div>
+      Existem <b>${usos} auditoria(s)</b> registrada(s) nesta área. <b>O histórico não é apagado</b> —
+      os registros continuam no painel e nos relatórios, apenas a área sai do cadastro.</div></div>` : ''}
+    ${a.campo ? `<div class="hint" style="margin-bottom:14px">Área incluída em campo por
+      <b>${esc(a.criadaPor||'—')}</b>${a.criadaEm?' em '+fmtD(a.criadaEm):''}.</div>` : ''}
+    <div class="f"><label class="fl">Motivo (fica registrado)</label>
+      <input class="inp" id="exMotivo" placeholder="Ex.: área duplicada, fora do escopo do contrato"></div>
+    <div style="display:flex;gap:9px;margin-top:6px">
+      <button class="btn btn-p" style="flex:1;justify-content:center;background:var(--red);border-color:var(--red)"
+        onclick="confirmarExclusaoArea('${esc(nome).replace(/'/g,'&#39;')}')">Excluir área</button>
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+    </div>`);
+}
+function confirmarExclusaoArea(nome){
+  const i = AREAS.findIndex(x=>x.nome===nome); if(i<0) return;
+  const a = AREAS[i];
+  const motivo = (($('exMotivo')||{}).value||'').trim();
+  AREAS.splice(i,1);
+  AREAS_EXCLUIDAS.push({area:a, nome:a.nome, motivo,
+    por:(USUARIO&&USUARIO.nome)||'', mat:(USUARIO&&USUARIO.mat)||'', em:hojeISO()});
+  salvarExcluidas(); saveAreas();
+  if(typeof renderSMS==='function') renderSMS();
+  closeModal(); abrirImportKML();
+  toast(a.nome + ' removida do cadastro');
+}
+function restaurarArea(nome){
+  const i = AREAS_EXCLUIDAS.findIndex(x=>x.nome===nome); if(i<0) return;
+  const reg = AREAS_EXCLUIDAS.splice(i,1)[0];
+  AREAS = prepararAreas([...AREAS, reg.area]);
+  salvarExcluidas(); saveAreas();
+  if(typeof renderSMS==='function') renderSMS();
+  abrirImportKML(); toast(reg.nome + ' voltou para o cadastro');
+}
+function blocoLixeira(){
+  if(!AREAS_EXCLUIDAS.length) return '';
+  return `<div style="margin-top:16px;border-top:1px solid var(--line2);padding-top:13px">
+    <div style="font-size:11.5px;font-weight:700;color:var(--slate);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">
+      Áreas removidas (${AREAS_EXCLUIDAS.length})</div>
+    ${AREAS_EXCLUIDAS.map(x=>`<div class="orig" style="cursor:default">
+      <div class="tx"><b>${esc(x.nome)}</b>
+        <span>removida por ${esc(x.por||'—')}${x.mat?' (mat. '+esc(x.mat)+')':''}${x.em?' em '+fmtD(x.em):''}</span>
+        ${x.motivo?`<span>“${esc(x.motivo)}”</span>`:''}</div>
+      <button class="btn btn-sm" onclick="restaurarArea('${esc(x.nome).replace(/'/g,'&#39;')}')">Restaurar</button>
+    </div>`).join('')}
+    <div class="hint" style="margin-top:9px">Uma nova importação do KML não traz de volta as áreas removidas.
+      Para reativar, use Restaurar.</div></div>`;
+}
 function abrirImportKML(){
   openModal('Áreas georreferenciadas', `
     ${blocoAreasNovas()}
@@ -1746,14 +1805,18 @@ function abrirImportKML(){
     <div style="margin-top:16px;border-top:1px solid var(--line2);padding-top:13px">
       <div style="font-size:11.5px;font-weight:700;color:var(--slate);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">
         Áreas cadastradas atualmente (${AREAS.length})${AREAS.some(a=>a.demo)?' — dados de exemplo':''}</div>
-      ${AREAS.map(a=>`<div style="font-size:13px;padding:5px 0;border-bottom:1px solid var(--line2);display:flex;gap:9px">
+      ${AREAS.map(a=>`<div style="font-size:13px;padding:5px 0;border-bottom:1px solid var(--line2);display:flex;gap:9px;align-items:flex-start">
         <span>${a.poly?'▦':a.rota?'〰':'📍'}</span><span style="flex:1">${esc(a.nome)}${
           a.campo?` <span class="badge b-pont" style="font-size:9.5px">incluída em campo</span>
             <div style="font-size:11px;color:var(--slate2);font-weight:600;margin-top:2px">
               por ${esc(a.criadaPor||'—')}${a.criadaPorMat?' (mat. '+esc(a.criadaPorMat)+')':''}${
               a.criadaEm?' em '+fmtD(a.criadaEm):''}${a.aprovadaPor?' · aprovada por '+esc(a.aprovadaPor):''}</div>`:''}</span>
-        <span style="color:var(--slate2);font-size:11.5px">${a.poly?a.poly.length+' vértices':a.rota?'rota':(a.ponto?'ponto':'sem coordenada')}</span></div>`).join('')}
-    </div>`);
+        <span style="color:var(--slate2);font-size:11.5px;white-space:nowrap">${a.poly?a.poly.length+' vértices':a.rota?'rota':(a.ponto?'ponto':'sem coordenada')}</span>
+        ${ehAdmin()?`<button class="icon-btn" title="Excluir área"
+          onclick="excluirArea('${esc(a.nome).replace(/'/g,'&#39;')}')">🗑</button>`:''}</div>`).join('')}
+      ${ehAdmin()?'':'<div class="hint" style="margin-top:9px">Somente o administrador pode incluir ou excluir áreas.</div>'}
+    </div>
+    ${blocoLixeira()}`);
 }
 function importarKML(inp){
   const f = inp.files[0]; if(!f) return;
@@ -1761,11 +1824,17 @@ function importarKML(inp){
   const fr = new FileReader();
   fr.onload = e => {
     try{
-      const novas = parseKML(e.target.result);
+      let novas = parseKML(e.target.result);
       if(!novas.length) throw new Error('Nenhum local encontrado no arquivo.');
-      AREAS = prepararAreas(novas); saveAreas();
+      const fora = new Set(AREAS_EXCLUIDAS.map(x=>x.nome));
+      const doCampo = AREAS.filter(a=>a.campo && !fora.has(a.nome));   // preserva as áreas criadas em campo
+      const nBloq = novas.filter(a=>fora.has(a.nome)).length;
+      novas = novas.filter(a=>!fora.has(a.nome));
+      AREAS = prepararAreas([...novas, ...doCampo.filter(c=>!novas.some(n=>n.nome===c.nome))]); saveAreas();
       const np = novas.filter(a=>a.poly).length, nt = novas.filter(a=>a.ponto).length;
-      $('kmlRes').innerHTML = `<div class="alert al-green">✅ <div><b>${novas.length} local(is) importado(s)</b> — ${np} área(s) com limite georreferenciado e ${nt} ponto(s) de referência. A lista do app de campo já foi atualizada.</div></div>`;
+      $('kmlRes').innerHTML = `<div class="alert al-green">✅ <div><b>${novas.length} local(is) importado(s)</b> — ${np} área(s) com limite georreferenciado e ${nt} ponto(s) de referência. A lista do app de campo já foi atualizada.${
+        nBloq?` <br>${nBloq} área(s) removida(s) pelo administrador foram ignoradas.`:''}${
+        doCampo.length?` <br>${doCampo.length} área(s) incluída(s) em campo foram preservadas.`:''}</div></div>`;
       toast(novas.length+' áreas importadas do Google Earth');
       setTimeout(()=>{ abrirImportKML(); if(typeof F!=='undefined'&&F&&typeof renderStep==='function') renderStep(); if(typeof renderSMS==='function') renderSMS(); }, 1400);
     }catch(err){
