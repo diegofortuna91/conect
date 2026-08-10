@@ -3314,8 +3314,9 @@ function pendenciasMes(ym){
   const porPessoa = registrosPorPessoa(rows);
   return USUARIOS.filter(u=>u.ativo && u.perfil!=='nenhum').map(u=>{
     const a = apurarAuditor(u, 'comportamental', ini, fim, porPessoa[chaveUsuario(u)] || []);
-    return {u, meta:a.exigidas, real:a.cumpridas, falta:a.faltas, aberta:a.abertas,
-            boas:a.boas, dispensadas:a.dispensadas, repeticoes:a.repeticoes,
+    return {u, meta:a.exigidas, decorridas:a.decorridas, real:a.cumpridas, falta:a.faltas,
+            aberta:a.abertas, futuras:a.futuras, foraVigencia:a.foraVigencia,
+            boas:a.boas, dispensadas:a.dispensadas, repeticoes:a.repeticoes, perdidas:a.perdidas,
             afast:a.afast, diasJanela:a.diasJanela, janelas:a.janelas};
   }).filter(x=>x.meta>0 || x.dispensadas>0)
     .sort((a,b)=> b.falta-a.falta || a.u.nome.localeCompare(b.u.nome,'pt'));
@@ -3364,7 +3365,7 @@ function abrirCobranca(){
              o excedente conta como boa prática. No dia 1º a contagem recomeça do zero.`
           : `<b>Meta cumprida por todos.</b> Nenhuma pendência em ${mesLbl(ym).toUpperCase()}.`)}</div></div>
     <div class="orig-hd" style="align-items:center">
-      <div><span>${fmtD(ym+'-01')} a ${fmtD(ultimoDiaDoMes(ym))}</span>
+      <div><span>${fmtD(ym+'-01')} a ${fmtD(ultimoDiaDoMes(ym))} · o placar compara com as semanas já decorridas</span>
         <b>${l0.length} auditor(es) com meta · ${l0.length-dev.length} em dia</b></div>
       <div style="display:flex;gap:7px;align-items:center;flex-wrap:wrap">
         <label class="chk-inline"><input type="checkbox" ${COB_SO_DEV?'checked':''}
@@ -3373,22 +3374,38 @@ function abrirCobranca(){
       </div>
     </div>
     ${l.length ? l.slice(0,300).map(x=>{
-      const pc = x.meta ? Math.min(100, Math.round(x.real/x.meta*100)) : 100;
+      /* compara com as semanas JÁ DECORRIDAS: cobrar contra o mês inteiro faria
+         quem está em dia na 2ª semana parecer devedor de três. */
+      const base = x.decorridas || x.meta;
+      const pc = base ? Math.min(100, Math.round(x.real/base*100)) : 100;
       const c = x.falta===0 ? '#7cb342' : (pc>=50 ? '#d9a521' : '#c8412f');
+      const perdidas = (x.perdidas||[]).map(j=>fmtD(j.ini).slice(0,5)+'–'+fmtD(j.fim).slice(0,5)).join(', ');
       return `<div class="orig" style="cursor:default">
         <div class="tx"><b>${esc(x.u.nome)}</b>
           <span>Mat. ${esc(x.u.mat)} · ${esc(x.u.funcao||'')}${x.u.os?' · '+esc(x.u.os):''}</span>
           <span>${(x.janelas||[]).map(j=>{
-            const cc = j.afast ? '#8b94ad' : j.cumpriu ? (j.repetida?'#c97a1f':'#7cb342') : (j.emCurso?'#c9d0e2':'#c8412f');
-            return `<span title="${esc(String(j.id))}" style="display:inline-block;width:11px;height:11px;
-              border-radius:3px;background:${cc};margin-right:2px"></span>`;}).join('')}</span>
-          <span>${[x.dispensadas?`<b style="color:#8b94ad">${x.dispensadas} semana(s) dispensada(s) por afastamento</b>`:'',
+            const cc = j.antes ? '#e6eaf4' : j.afast ? '#8b94ad'
+                     : j.cumpriu ? (j.repetida?'#c97a1f':'#7cb342')
+                     : j.futura ? 'transparent' : j.emCurso ? '#c9d0e2' : '#c8412f';
+            const bd = j.futura ? '1px dashed #c9d0e2' : '0';
+            const tt = j.antes ? 'antes da vigência' : j.afast ? 'afastado'
+                     : j.cumpriu ? (j.area||'cumprida') : j.futura ? 'ainda não começou'
+                     : j.emCurso ? 'semana corrente' : 'perdida';
+            return `<span title="${esc(fmtD(j.ini)+' a '+fmtD(j.fim)+' · '+tt)}" style="display:inline-block;
+              width:11px;height:11px;border-radius:3px;background:${cc};border:${bd};
+              box-sizing:border-box;margin-right:2px"></span>`;}).join('')}</span>
+          <span>${[perdidas?`<b style="color:#c8412f">sem auditoria em ${perdidas}</b>`:'',
+                   x.aberta?'semana corrente ainda em aberto':'',
+                   x.futuras?`${x.futuras} semana(s) por vir`:'',
+                   x.dispensadas?`<b style="color:#8b94ad">${x.dispensadas} dispensada(s) por afastamento</b>`:'',
+                   x.foraVigencia?`${x.foraVigencia} antes da vigência`:'',
                    x.boas?`${x.boas} além da meta`:'',
                    x.repeticoes?`<b style="color:#c97a1f">${x.repeticoes} na mesma área da semana anterior</b>`:''
-                  ].filter(Boolean).join(' · ') || 'sem afastamento no mês'}</span></div>
+                  ].filter(Boolean).join(' · ') || 'em dia, sem afastamento'}</span></div>
         <div style="width:110px"><div class="bar-track"><div class="bar-fill" style="width:${pc}%;background:${c}"></div></div></div>
-        <div class="rs" style="min-width:78px;text-align:right"><b style="color:${c}">${x.real}</b>/${x.meta}
-          <br><span style="font-size:11px;color:var(--slate2)">${x.falta?(x.falta+' semana(s) perdida(s)'):'em dia'}</span></div>
+        <div class="rs" style="min-width:86px;text-align:right"><b style="color:${c}">${x.real}</b>/${base}
+          <br><span style="font-size:11px;color:var(--slate2)">${x.falta?(x.falta+' perdida(s))').replace('))',')'):'em dia'}${
+            x.futuras?`<br>+${x.futuras} no mês`:''}</span></div>
       </div>`;}).join('')
     : `<div class="empty"><div class="ic">✅</div><p>Ninguém devendo neste recorte.</p></div>`}
     ${l.length>300?`<div class="hint" style="text-align:center;margin-top:10px">exibindo 300 de ${l.length}</div>`:''}`);
@@ -3755,16 +3772,18 @@ function renderKpisSMS(rows, comp, oal, s5){
     const [i,f] = intervaloPeriodo();
     const {g} = metasDoIntervalo(i, f, 'comportamental');
     sem = Object.keys(g).reduce((a,k)=>({
-      meta:a.meta+g[k].meta, real:a.real+g[k].real, faltas:a.faltas+g[k].faltas,
+      meta:a.meta+g[k].meta, dec:a.dec+g[k].decorridas, real:a.real+g[k].real,
+      faltas:a.faltas+g[k].faltas, fut:a.fut+g[k].futuras,
       boas:a.boas+g[k].boas, rep:a.rep+g[k].repeticoes, disp:a.disp+g[k].dispensadas
-    }), {meta:0, real:0, faltas:0, boas:0, rep:0, disp:0});
+    }), {meta:0, dec:0, real:0, faltas:0, fut:0, boas:0, rep:0, disp:0});
   }
-  const pcSem = sem && sem.meta ? Math.round(sem.real/sem.meta*100) : null;
+  const baseSem = sem ? (sem.dec || sem.meta) : 0;
+  const pcSem = baseSem ? Math.round(sem.real/baseSem*100) : null;
   const kp = [
     {l:'Auditorias no período', v:rows.length, f:`${comp.length} comport. · ${oal.length} OAL · ${s5.length} 5S`, k:''},
-    {l:'Semanas cumpridas', v: pcSem===null ? '—' : sem.real+'/'+sem.meta,
+    {l:'Semanas cumpridas', v: pcSem===null ? '—' : sem.real+'/'+baseSem,
      f: pcSem===null ? 'importe o efetivo para apurar'
-        : `${pcSem}% · ${sem.faltas} semana(s) perdida(s)${sem.boas?' · '+sem.boas+' além da meta':''}`,
+        : `${pcSem}% das decorridas · ${sem.faltas} perdida(s)${sem.fut?' · '+sem.fut+' por vir':''}`,
      k: pcSem===null?'':pcSem>=100?'k-green':pcSem>=70?'k-amber':'k-red'},
     {l:'Desvios comportamentais', v:A.total, f:comp.length? (A.total/comp.length).toFixed(2)+' por auditoria':'—', k:'k-amber'},
     {l:'Auditorias críticas', v:crit, f:'exigem tratamento imediato', k:'k-red'},
@@ -3979,6 +3998,25 @@ function grupoDoAuditor(u, ini, fim){
 const afastadoNaJanela = (u, ji, jf) =>
   (u.afastamentos||[]).some(a => sobrepoe(ji, jf, a.de, a.ate) > 0);
 
+/* A regra da semana só vale a partir do dia em que o sistema entrou em operação.
+   Sem isso, ao ligar o painel no meio do mês toda semana anterior aparece como
+   perdida — cobrança de um período em que ninguém tinha o aplicativo na mão.
+   Ordem: o marco gravado na base; senão, a semana do primeiro registro real. */
+let VIGENCIA = null;
+function inicioDaCobranca(){
+  if(VIGENCIA) return VIGENCIA;
+  const reais = DB.filter(r => r.origem === 'campo' && r.data).map(r => r.data).sort();
+  if(!reais.length) return null;                    // só demonstração: não limita
+  return intervaloSemana(semanaISO(reais[0]))[0];   // segunda da semana do 1º registro
+}
+async function baixarVigencia(){
+  if(!NUVEM.pronta || !firebase.auth().currentUser) return;
+  try{
+    const d = await FS.collection('config').doc('instalado').get();
+    if(d.exists && d.data().em) VIGENCIA = d.data().em;
+  }catch(e){}
+}
+
 function registrosPorPessoa(rows){
   const m = {};
   rows.forEach(r => { const c = chaveRegistro(r); (m[c] = m[c] || []).push(r); });
@@ -3999,32 +4037,40 @@ function apurarAuditor(u, tipo, ini, fim, regs){
   const cad = CADENCIA[tipo] || CADENCIA.comportamental;
   const g = grupoDoAuditor(u, ini, fim);
   const dj = JAN_DIAS(cad[g] || 0);
-  const o = {grupo:g, diasJanela:dj, janelas:[], exigidas:0, cumpridas:0, faltas:0,
-             boas:0, dispensadas:0, repeticoes:0, abertas:0, afast:0};
+  const o = {grupo:g, diasJanela:dj, janelas:[], exigidas:0, decorridas:0, cumpridas:0, faltas:0,
+             boas:0, dispensadas:0, repeticoes:0, abertas:0, futuras:0, foraVigencia:0, afast:0,
+             perdidas:[]};
   const disp = disponibilidade(u, ini, fim);
   o.afast = disp.afast;
   if(!dj) return o;
   const hj = hojeISO();
+  const vig = inicioDaCobranca();
   const jans = janelasDoIntervalo(ini, fim, dj);
   let areaAnt = jans.length ? areaDaJanelaAnterior(u, tipo, jans[0].ini, dj) : '';
   jans.forEach(j => {
     const lista = (regs||[]).filter(r => r.data >= j.ini && r.data <= j.fim);
     const afast   = afastadoNaJanela(u, j.ini, j.fim);
-    const emCurso = j.fim >= hj;
-    const principal = lista[0] || null;                 // a primeira da janela é a que cumpre
-    const boas = Math.max(0, lista.length - 1);         // as demais são boa prática
+    const futura  = j.ini > hj;                          // a janela ainda não começou
+    const emCurso = !futura && j.fim >= hj;              // é a janela corrente
+    const antes   = !!(vig && j.fim < vig);              // anterior à vigência da regra
+    const principal = lista[0] || null;                  // a primeira da janela é a que cumpre
+    const boas = Math.max(0, lista.length - 1);          // as demais são boa prática
     const repetida = !!(principal && areaAnt && normNome(principal.area) === normNome(areaAnt));
-    const jj = {...j, afast, emCurso, exigida:!afast, cumpriu:!!principal, boas, repetida,
+    const jj = {...j, afast, futura, emCurso, antes, exigida:!afast && !antes,
+                cumpriu:!!principal, boas, repetida,
                 justificativa: (principal && principal.repeticaoMotivo) || '',
                 area: principal ? (principal.area||'') : '', areaAnterior: areaAnt,
                 n: lista.length, registros: lista, principal};
     o.janelas.push(jj);
-    if(afast) o.dispensadas++;
+    if(antes)      o.foraVigencia++;
+    else if(afast) o.dispensadas++;
     else {
       o.exigidas++;
+      if(!futura) o.decorridas++;          // janelas que já podem ser avaliadas (inclui a corrente)
       if(principal) o.cumpridas++;
+      else if(futura) o.futuras++;
       else if(emCurso) o.abertas++;
-      else o.faltas++;
+      else { o.faltas++; o.perdidas.push(j); }
     }
     o.boas += boas;
     if(repetida) o.repeticoes++;
@@ -4038,14 +4084,17 @@ function metasDoIntervalo(ini, fim, tipo){
   const rows = baseSemMes().filter(r => (r.tipo||'comportamental') === t
                                      && r.data >= ini && r.data <= fim);
   const porPessoa = registrosPorPessoa(rows);
-  const g = {}; Object.keys(GRUPO_META).forEach(k => g[k] = {meta:0, real:0, faltas:0, boas:0,
-    dispensadas:0, repeticoes:0, abertas:0, pessoas:[], afastados:0, interinos:0, diasJanela:0});
+  const g = {}; Object.keys(GRUPO_META).forEach(k => g[k] = {meta:0, decorridas:0, real:0, faltas:0,
+    boas:0, dispensadas:0, repeticoes:0, abertas:0, futuras:0, foraVigencia:0,
+    pessoas:[], afastados:0, interinos:0, diasJanela:0});
   USUARIOS.filter(u => u.ativo && u.perfil !== 'nenhum').forEach(u => {
     const a = apurarAuditor(u, t, ini, fim, porPessoa[chaveUsuario(u)] || []);
     if(!a.diasJanela) return;
     const k = a.grupo; if(!g[k]) return;
     g[k].diasJanela = a.diasJanela;
     g[k].meta += a.exigidas;   g[k].real  += a.cumpridas;  g[k].faltas += a.faltas;
+    g[k].decorridas += a.decorridas;  g[k].futuras += a.futuras;
+    g[k].foraVigencia += a.foraVigencia;
     g[k].boas += a.boas;       g[k].abertas += a.abertas;
     g[k].dispensadas += a.dispensadas;  g[k].repeticoes += a.repeticoes;
     g[k].pessoas.push({u, ...a, dias:0, interino: !!u.interinoAte});
@@ -4121,45 +4170,57 @@ function renderMetas(rows){
       ${JAN_NOME(7)} conta como <b>boa prática</b> e não abate a ${JAN_NOME(7)} seguinte.</div>
     ${linhas.map(k=>{
       const grp = g[k], dj = grp.diasJanela;
-      const pc = grp.meta ? Math.min(100, grp.real/grp.meta*100) : (grp.real?100:0);
+      /* o placar mede o que já pode ser medido: semanas decorridas, não o mês inteiro */
+      const base = grp.decorridas || grp.meta;
+      const pc = base ? Math.min(100, grp.real/base*100) : (grp.real?100:0);
       const cor = pc>=100?'#7cb342':pc>=70?'#d9a521':'#c8412f';
       const extras = [];
+      if(grp.futuras)     extras.push(`${grp.futuras} ${JAN_NOME_P(dj)} ainda por vir`);
       if(grp.boas)        extras.push(`${grp.boas} boa(s) prática(s)`);
-      if(grp.abertas)     extras.push(`${grp.abertas} em curso`);
       if(grp.dispensadas) extras.push(`${grp.dispensadas} dispensada(s) por afastamento`);
       if(grp.repeticoes)  extras.push(`<b style="color:#c97a1f">${grp.repeticoes} repetição(ões) de área</b>`);
       return `<div class="meta-row clk" onclick="detalharMeta('${k}')" style="cursor:pointer">
         <div class="who">${GRUPO_META[k]}
           <small>${grp.pessoas.length} auditor(es) · 1 por ${JAN_NOME(dj)}${extras.length?' · '+extras.join(' · '):''}</small></div>
         <div class="bar-track"><div class="bar-fill" style="width:${pc}%;background:${cor}"></div></div>
-        <div class="pc" style="color:${cor}">${grp.real}/${grp.meta}</div></div>`;}).join('')
+        <div class="pc" style="color:${cor}">${grp.real}/${base}</div></div>`;}).join('')
       || '<div class="empty"><p>Nenhum auditor habilitado no efetivo.</p></div>'}
-    <div class="hint" style="margin-top:10px">Contagem em <b>${JAN_NOME_P(7)} cumpridas</b>, não em auditorias.
+    <div class="hint" style="margin-top:10px">O placar compara com as <b>${JAN_NOME_P(7)} já decorridas</b> —
+      as que ainda não começaram não entram na conta. Contagem em ${JAN_NOME_P(7)} cumpridas, não em auditorias.
       ${totBoas?`${totBoas} auditoria(s) além da meta no período. `:''}${totRep?`${totRep} feita(s) na mesma área da ${JAN_NOME(7)} anterior. `:''}${totDisp?`${totDisp} ${JAN_NOME_P(7)} não foram exigidas por afastamento. `:''}Clique numa linha para ver auditor por auditor.</div>`;
 }
 function detalharMeta(k){
   if(!META_DET) return;
   const grp = META_DET.g[k], dj = grp.diasJanela;
   const l = grp.pessoas.slice().sort((a,b)=>
-    (a.cumpridas/Math.max(a.exigidas,.01)) - (b.cumpridas/Math.max(b.exigidas,.01))
+    (a.cumpridas/Math.max(a.decorridas||a.exigidas,.01)) - (b.cumpridas/Math.max(b.decorridas||b.exigidas,.01))
     || b.faltas - a.faltas);
   const chip = (t, c) => `<span class="badge" style="background:${c}1f;color:${c};margin-right:4px">${t}</span>`;
   openModal(GRUPO_META[k] + ' — cumprimento por auditor', `
     <div class="orig-hd"><div><span>${fmtD(META_DET.ini)} a ${fmtD(META_DET.fim)} · uma auditoria por ${JAN_NOME(dj)}</span>
-      <b>${l.length} auditor(es) · ${grp.real} de ${grp.meta} ${JAN_NOME_P(dj)} cumprida(s)</b></div></div>
+      <b>${l.length} auditor(es) · ${grp.real} de ${grp.decorridas||grp.meta} ${JAN_NOME_P(dj)} decorrida(s)${
+        grp.futuras?` · ${grp.futuras} ainda por vir`:''}</b></div></div>
     ${l.map(p=>{
-      const pc = p.exigidas ? Math.min(100, p.cumpridas/p.exigidas*100) : (p.cumpridas?100:0);
+      const base = p.decorridas || p.exigidas;
+      const pc = base ? Math.min(100, p.cumpridas/base*100) : (p.cumpridas?100:0);
       const cor = pc>=100?'#7cb342':pc>=70?'#d9a521':'#c8412f';
       const marcas = [];
+      if(p.faltas)      marcas.push(chip(p.faltas+' perdida'+(p.faltas>1?'s':''),'#c8412f'));
       if(p.boas)        marcas.push(chip(p.boas+' boa prática','#2f8f9e'));
-      if(p.abertas)     marcas.push(chip(p.abertas+' em curso','#3a4a9e'));
+      if(p.abertas)     marcas.push(chip('semana corrente em aberto','#3a4a9e'));
+      if(p.futuras)     marcas.push(chip(p.futuras+' por vir','#8b94ad'));
       if(p.dispensadas) marcas.push(chip(p.dispensadas+' dispensada','#8b94ad'));
       if(p.repeticoes)  marcas.push(chip(p.repeticoes+' repetiu área','#c97a1f'));
       const jl = p.janelas.map(j=>{
-        const c = j.afast ? '#8b94ad' : j.cumpriu ? (j.repetida?'#c97a1f':'#7cb342') : (j.emCurso?'#c9d0e2':'#c8412f');
-        const t = j.afast ? 'afastado' : j.cumpriu ? (j.area||'sem área') : (j.emCurso?'em curso':'sem auditoria');
-        return `<span title="${esc(String(j.id))} · ${esc(t)}" style="display:inline-block;width:12px;height:12px;
-          border-radius:3px;background:${c};margin:0 2px 0 0"></span>`;
+        const c = j.antes ? '#e6eaf4' : j.afast ? '#8b94ad'
+                : j.cumpriu ? (j.repetida?'#c97a1f':'#7cb342')
+                : j.futura ? 'transparent' : j.emCurso ? '#c9d0e2' : '#c8412f';
+        const bd = j.futura ? '1px dashed #c9d0e2' : '0';
+        const t = j.antes ? 'antes da vigência' : j.afast ? 'afastado'
+                : j.cumpriu ? (j.area||'cumprida') : j.futura ? 'ainda não começou'
+                : j.emCurso ? 'semana corrente, em aberto' : 'perdida';
+        return `<span title="${esc(fmtD(j.ini)+' a '+fmtD(j.fim)+' · '+t)}" style="display:inline-block;width:12px;
+          height:12px;border-radius:3px;background:${c};border:${bd};box-sizing:border-box;margin:0 2px 0 0"></span>`;
       }).join('');
       return `<div class="orig" style="cursor:default">
         <div class="tx"><b>${esc(p.u.nome)}</b>
@@ -4167,12 +4228,15 @@ function detalharMeta(k){
           <span style="margin-top:3px">${jl}</span>
           <span>${marcas.join('')||'&nbsp;'}</span></div>
         <div style="width:110px"><div class="bar-track"><div class="bar-fill" style="width:${pc}%;background:${cor}"></div></div></div>
-        <div class="rs" style="min-width:52px"><b style="color:${cor}">${p.cumpridas}</b>/${p.exigidas}</div>
+        <div class="rs" style="min-width:52px"><b style="color:${cor}">${p.cumpridas}</b>/${base}</div>
       </div>`;}).join('')}
     <div class="hint" style="margin-top:12px">Cada quadradinho é uma ${JAN_NOME(dj)} do período:
       <b style="color:#7cb342">verde</b> cumprida · <b style="color:#c97a1f">laranja</b> cumprida na mesma área da
-      ${JAN_NOME(dj)} anterior · <b style="color:#c8412f">vermelho</b> sem auditoria ·
-      <b style="color:#8b94ad">cinza</b> não exigida por afastamento.</div>`);
+      ${JAN_NOME(dj)} anterior · <b style="color:#c8412f">vermelho</b> perdida ·
+      <b style="color:#5d6785">cinza-azulado</b> a ${JAN_NOME(dj)} corrente, ainda em aberto ·
+      <b style="color:#8b94ad">tracejado</b> ainda não começou ·
+      <b style="color:#8b94ad">cinza</b> não exigida por afastamento.
+      <br>O placar é medido só sobre as ${JAN_NOME_P(dj)} já decorridas.</div>`);
 }
 function metasFixas(rows){
   const nMeses = ehMes(periodoAtual()) ? 1 : Math.max(1, mesesDoAno(anoDoPeriodo()).length);
@@ -5698,8 +5762,9 @@ function renderInicio(){
     const [i,f] = intervaloDe(ym);
     const {g} = metasDoIntervalo(i, f, 'comportamental');
     const t = Object.keys(g).reduce((a,k)=>({real:a.real+g[k].real, meta:a.meta+g[k].meta,
-      faltas:a.faltas+g[k].faltas}), {real:0, meta:0, faltas:0});
-    if(t.meta){ semTxt = t.real+'/'+t.meta; semSub = 'semanas cumpridas no mês'; pend = t.faltas; }
+      dec:a.dec+g[k].decorridas, faltas:a.faltas+g[k].faltas}), {real:0, meta:0, dec:0, faltas:0});
+    const bs = t.dec || t.meta;
+    if(bs){ semTxt = t.real+'/'+bs; semSub = 'semanas cumpridas até agora'; pend = t.faltas; }
   }
   el.innerHTML = `
     <div class="hero">
@@ -5824,7 +5889,7 @@ aplicaLogos();
     netStatus(); return;
   }
   aplicarSessao(_u); aoEntrar();
-  try{ ouvirAuditorias(); baixarEfetivoNuvem(); baixarAreasNuvem(); }catch(e){}
+  try{ ouvirAuditorias(); baixarEfetivoNuvem(); baixarAreasNuvem(); baixarVigencia(); }catch(e){}
   netStatus();
 })();
 
