@@ -1377,6 +1377,13 @@ body.logged #login{display:none}
    A unificação futura troca esta função por um login único e um menu de módulos.
    ===================================================================== */
 let USUARIO = null;
+/* Ordem das listas: mais recente em cima. A data sozinha não basta — várias auditorias
+   caem no mesmo dia, e sem o horário elas apareciam embaralhadas dentro da data. */
+const cmpRecente = (a,b) =>
+  (a.data !== b.data) ? (a.data < b.data ? 1 : -1)
+  : ((b.horaIni||'').localeCompare(a.horaIni||'')
+     || (b.horaFim||'').localeCompare(a.horaFim||'')
+     || String(b.id||'').localeCompare(String(a.id||'')));
 function nomeDoLogin(l){
   return l.split(/[.\s_]+/).filter(Boolean)
     .map(p=>p.charAt(0).toUpperCase()+p.slice(1).toLowerCase()).join(' ');
@@ -1604,23 +1611,32 @@ async function gravarEfetivoNaNuvem(lista, aoAndar){
   return feitos;
 }
 /* cria o acesso de cada pessoa numa instância separada, para não derrubar a sessão do admin */
+/* O Firebase bloqueia o aparelho quando recebe muitas criações de conta seguidas
+   (auth/too-many-requests). Por isso a criação anda devagar e PARA no primeiro bloqueio,
+   em vez de queimar o resto da fila: quem já foi criado permanece, e o "Republicar na base"
+   continua de onde parou, porque quem já existe volta como 'email-already-in-use'. */
+const espera = ms => new Promise(r => setTimeout(r, ms));
 async function criarAcessos(lista, aoAndar){
   const sec = firebase.apps.find(a=>a.name==='criador') || firebase.initializeApp(FB_CFG, 'criador');
   const auth2 = sec.auth();
-  let criados = 0, existentes = 0, erros = 0, i = 0;
+  let criados = 0, existentes = 0, erros = 0, i = 0, bloqueado = false, ultimoErro = '';
   for(const u of lista){
     const mat = soDigitos(u.mat); i++;
     if(!mat){ erros++; continue; }
     try{
       await auth2.createUserWithEmailAndPassword(emailDaMatricula(mat), senhaFB(mat));
       criados++;
+      await espera(900);                       // ritmo que o Firebase aceita sem bloquear
     }catch(e){
-      if(String(e.code||'').indexOf('email-already-in-use')>=0) existentes++; else erros++;
+      const c = String(e.code||'');
+      if(c.indexOf('email-already-in-use')>=0){ existentes++; }
+      else if(c.indexOf('too-many-requests')>=0){ bloqueado = true; ultimoErro = c; break; }
+      else { erros++; ultimoErro = c || (e.message||''); }
     }
     try{ await auth2.signOut(); }catch(e){}
     if(aoAndar) aoAndar(i, lista.length, criados, existentes);
   }
-  return {criados, existentes, erros};
+  return {criados, existentes, erros, bloqueado, ultimoErro, faltam: lista.length - (criados + existentes)};
 }
 async function fecharImplantacao(){
   try{
@@ -1680,7 +1696,7 @@ function ouvirAuditorias(){
     const nuvem = [];
     q.forEach(d=>{ const r = d.data(); r.id = d.id; r.origem = 'campo'; r.sync = true; nuvem.push(r); });
     const locais = DB.filter(r=>r.origem !== 'campo' && !nuvem.some(x=>x.id===r.id));
-    DB = [...nuvem, ...locais].sort((a,b)=> a.data<b.data?1:-1);
+    DB = [...nuvem, ...locais].sort(cmpRecente);
     saveDB();
     if(typeof renderSMS==='function' && document.body.classList.contains('logged')) renderSMS();
   }, err=>{ NUVEM_OUVINDO = false; });
@@ -2245,7 +2261,7 @@ function voltarDemonstracao(){
 function regerarDemo(){
   const meus = (()=>{ try{ return (JSON.parse(store.get('sms_auditorias')||'[]')||[]).filter(r=>r && r.origem==='campo'); }catch(e){ return []; } })();
   if(SEM_DEMO){ DB = meus; saveDB(); return; }
-  DB = [...meus, ...seed()].sort((a,b)=> a.data<b.data?1:-1);
+  DB = [...meus, ...seed()].sort(cmpRecente);
   store.set('sms_dados_ver', DADOS_VER); saveDB();
 }
 
@@ -2491,7 +2507,7 @@ function seed(){
     });
   })();
   out.forEach(r=>{ if(!r.tipo){ r.tipo='comportamental'; r.tipoNome=TIPOS.comportamental.nome; r.tipoCod=TIPOS.comportamental.cod; } });
-  out.sort((a,b)=> a.data<b.data?1:-1);
+  out.sort(cmpRecente);
   // gera imagem de PT para os 6 registros mais recentes (demonstração do ícone de download/visualização)
   out.filter(r=>r.tipo==='comportamental').slice(0,6).forEach(r=>{ try{ r.ptFoto = ptImage(r.contrato, r.ptNumero, fmtD(r.data)); }catch(e){} });
   return out;
@@ -4097,7 +4113,7 @@ function badgeCls(v){
     'OURO':'b-sist','PRATA':'b-pont','BRONZE':'b-sist'})[v] || 'b-pont';
 }
 function renderTabela(rows){
-  L_TBL = (TIPO_TBL ? porTipo(rows,TIPO_TBL) : rows);
+  L_TBL = (TIPO_TBL ? porTipo(rows,TIPO_TBL) : rows).slice().sort(cmpRecente);
   const vis = L_TBL.slice(0, tblLimit);
   $('tblCount').textContent = L_TBL.length+' registro(s)'+(L_TBL.length>tblLimit?' · exibindo '+vis.length:'');
   $('tbl').innerHTML = `<thead><tr><th>Registro</th><th>Checklist</th><th>Data</th><th>Auditor</th><th>Área</th>
@@ -5207,9 +5223,14 @@ async function publicarEfetivo(){
     ouvirAuditorias();
     openModal('Base de dados pronta', `
       <div class="alert al-green" style="margin-bottom:14px">✅ <div>
-        <b>${USUARIOS.length} colaborador(es)</b> na base e <b>${comAcesso.length} acesso(s)</b> liberado(s)
-        (${r.criados} criado(s) agora, ${r.existentes} já existia(m)${r.erros?', '+r.erros+' com erro':''}).
+        <b>${USUARIOS.length} colaborador(es)</b> na base e <b>${r.criados + r.existentes} de ${comAcesso.length} acesso(s)</b>
+        liberado(s) (${r.criados} criado(s) agora, ${r.existentes} já existia(m)${r.erros?', '+r.erros+' com erro':''}).
         <br>${areasOK ? areasOK+' área(s) enviada(s) para a base.' : 'Áreas não enviadas'+(areasErro?': '+esc(areasErro):'')+'.'}</div></div>
+      ${r.bloqueado ? `<div class="alert al-amber" style="margin-bottom:14px">⏳ <div>
+        <b>Faltam ${r.faltam} acesso(s).</b> A base bloqueou a criação de contas por excesso de
+        pedidos seguidos deste computador — é uma proteção do Firebase, não um erro do cadastro.
+        Espere de <b>30 a 60 minutos</b> e clique em <b>☁ Republicar na base</b> de novo: ele continua
+        de onde parou, sem repetir quem já foi criado.</div></div>` : ''}
       <div style="font-size:13.5px;color:var(--slate);line-height:1.6">
         Agora é só o auditor abrir o aplicativo de campo e entrar com a <b>matrícula</b>.
         A senha inicial de todos é <b>a própria matrícula</b> — nome, função e O.S vêm da base.
