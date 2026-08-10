@@ -995,6 +995,39 @@ textarea.inp{resize:vertical;min-height:78px;line-height:1.5}
 .rev-row .v{text-align:right;font-weight:600}
 
 /* ============ DASHBOARD ============ */
+/* ---------- página inicial da plataforma e navegação ---------- */
+.crumb{display:flex;align-items:center;gap:9px;margin-bottom:14px;flex-wrap:wrap}
+.crumb .volta{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--line);
+  padding:7px 13px;border-radius:8px;font-weight:700;font-size:12.5px;color:var(--navy2);cursor:pointer}
+.crumb .volta:hover{border-color:var(--navy2)}
+.crumb .via{font-size:12.5px;color:var(--slate2);font-weight:600}
+.crumb .via a{color:var(--navy2);text-decoration:none;font-weight:700;cursor:pointer}
+.crumb .via a:hover{text-decoration:underline}
+.hero{background:linear-gradient(135deg,#1b2a56 0%,var(--navy) 60%,#26356e 100%);
+  border-radius:16px;padding:26px 28px;color:#fff;margin-bottom:20px}
+.hero h1{font-size:25px;margin:0 0 5px;letter-spacing:-.3px}
+.hero p{margin:0;color:#b8c4e4;font-size:13.5px}
+.hero .res{display:flex;gap:26px;flex-wrap:wrap;margin-top:18px}
+.hero .res>div{min-width:104px}
+.hero .res b{display:block;font-size:26px;line-height:1.1;font-variant-numeric:tabular-nums}
+.hero .res span{font-size:11px;color:#93a0c4;text-transform:uppercase;letter-spacing:.05em;font-weight:700}
+.modgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(268px,1fr));gap:14px}
+.modcard{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;
+  display:flex;flex-direction:column;gap:10px;position:relative}
+.modcard.on{cursor:pointer;border-color:#c3ccf0;box-shadow:var(--sh)}
+.modcard.on:hover{border-color:var(--navy2);transform:translateY(-2px);transition:.15s}
+.modcard.off{opacity:.62}
+.modcard .top{display:flex;align-items:center;gap:12px}
+.modcard .ic{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;
+  justify-content:center;font-size:21px;color:#fff;flex:none}
+.modcard h3{font-size:16.5px;margin:0}
+.modcard p{margin:0;font-size:12.8px;color:var(--slate);line-height:1.5}
+.modcard .st{font-size:10.5px;font-weight:800;letter-spacing:.05em;text-transform:uppercase;
+  padding:3px 9px;border-radius:20px;background:var(--line2);color:var(--slate2);align-self:flex-start}
+.modcard .st.on{background:var(--green-l);color:var(--green-d)}
+.atalhos{display:flex;gap:11px;flex-wrap:wrap;margin-top:18px}
+.secTit{font-size:11px;font-weight:800;color:var(--slate2);text-transform:uppercase;
+  letter-spacing:.06em;margin:22px 0 10px}
 .dash-head{display:flex;align-items:flex-end;gap:14px;flex-wrap:wrap;margin-bottom:16px}
 .dash-head h1{font-size:22px}
 .dash-head p{margin:3px 0 0;color:var(--slate);font-size:13px}
@@ -1216,7 +1249,8 @@ body.logged #login{display:none}
 </div>
 
 <div class="topbar">
-  <div class="brand">
+  <div class="brand" onclick="if(document.body.classList.contains('logged'))setVista('inicio')"
+       style="cursor:pointer" title="Voltar para a página inicial">
     <img class="logo-img" id="brandLogo" alt="Service Engenharia">
     <div class="txt">
       <div class="t1" id="brandT1">Service Conect+ · Gestão e Controle de Contrato</div>
@@ -1225,15 +1259,18 @@ body.logged #login{display:none}
   </div>
   <div class="userchip" id="userchip" style="display:none" onclick="sair()" title="Encerrar sessão"><span class="ini"></span><span class="nm"></span></div>
   <div class="topnav" id="modnav" style="margin-left:auto">
-    <button onclick="abrirModulos()">☰ Módulos</button>
-    <button class="on" onclick="setVista('sms',this)">🛡 SMS</button>
+    <button class="on" onclick="setVista('inicio',this)">⌂ Início</button>
+    <button onclick="setVista('sms',this)">🛡 SMS</button>
     <button onclick="setVista('procs',this)">📚 Procedimentos</button>
     <button id="btnAdmin" style="display:none" onclick="setVista('admin',this)">⚙ Efetivo</button>
   </div>
   <div class="netpill" id="netpill"><span class="dot"></span><span class="lbl">Conectado ao servidor</span></div>
 </div>
 
-<div class="view on" id="dash"><div class="wrap">
+<div class="view on" id="inicioView"><div class="wrap" id="inicioBody"></div></div>
+
+<div class="view" id="dash"><div class="wrap">
+  <div class="crumb no-print" id="crumbSms"></div>
   <div class="dash-head">
     <div><h1>Módulo SMS — Painel de Indicadores</h1><p id="dashSub"></p></div>
     <div class="filters no-print">
@@ -1355,9 +1392,12 @@ body.logged #login{display:none}
     <div class="tbl-wrap"><table class="dt" id="tbl"></table></div></div>
 </div></div>
 
-<div class="view" id="usuariosView"><div class="wrap" id="usuariosBody"></div></div>
+<div class="view" id="usuariosView"><div class="wrap">
+  <div class="crumb no-print" id="crumbAdmin"></div>
+  <div id="usuariosBody"></div></div></div>
 
 <div class="view" id="procsView"><div class="wrap">
+  <div class="crumb no-print" id="crumbProcs"></div>
   <div class="dash-head"><div><h1>📚 Procedimentos do SGI</h1>
     <p>Documentos controlados disponíveis para leitura e download.</p></div></div>
   <div id="procsBody"></div>
@@ -1543,7 +1583,7 @@ async function criarAdministrador(mat, sen){
         matrícula automaticamente.</div>
       <div style="display:flex;gap:9px;margin-top:14px">
         <button class="btn btn-p" style="flex:1;justify-content:center"
-          onclick="closeModal();setVista('admin',document.getElementById('btnAdmin'));abrirImportEfetivo()">Importar o efetivo agora</button>
+          onclick="closeModal();setVista('admin');abrirImportEfetivo()">Importar o efetivo agora</button>
         <button class="btn" onclick="closeModal()">Depois</button></div>`);
   }catch(e){
     const cd = (e && e.code) || '';
@@ -5604,15 +5644,100 @@ function importarCampo(inp){
   fr.readAsText(f,'UTF-8');
 }
 let VISTA = 'sms';
-function setVista(v, el){
-  if(el) [...el.parentNode.children].forEach(b=>b.classList.toggle('on', b===el));
+/* =====================================================================
+   NAVEGAÇÃO DA PLATAFORMA
+   O painel abre na página inicial, não dentro do SMS: a plataforma tem vários
+   módulos e a escolha do caminho é o primeiro passo. Cada tela interna traz
+   trilha e botão de voltar, e o logo leva de volta ao início.
+   ===================================================================== */
+const VISTAS = {
+  inicio: {el:'inicioView', nome:'Início',                 crumb:null},
+  sms:    {el:'dash',       nome:'Módulo SMS',             crumb:'crumbSms'},
+  procs:  {el:'procsView',  nome:'Procedimentos do SGI',   crumb:'crumbProcs'},
+  admin:  {el:'usuariosView', nome:'Efetivo e Acessos',    crumb:'crumbAdmin'}
+};
+let VISTA_ATUAL = 'inicio';
+const NAV_PILHA = [];
+
+function setVista(v, el, semEmpilhar){
+  if(!VISTAS[v]) v = 'inicio';
+  if(!semEmpilhar && v !== VISTA_ATUAL) NAV_PILHA.push(VISTA_ATUAL);
+  VISTA_ATUAL = v;
+  /* o botão da barra acende pela vista, não pelo clique — assim o logo e a trilha também acertam */
+  const nav = $('modnav');
+  if(nav){ const ordem = ['inicio','sms','procs','admin'];
+    [...nav.children].forEach((b,i)=> b.classList.toggle('on', ordem[i] === v)); }
   document.querySelectorAll('.view').forEach(e=>e.classList.remove('on'));
-  if(v==='procs'){ $('procsView').classList.add('on'); renderProcs(); window.scrollTo(0,0); return; }
-  if(v==='admin'){ $('usuariosView').classList.add('on'); renderUsuarios(); window.scrollTo(0,0); return; }
-  VISTA='sms'; $('dash').classList.add('on'); renderSMS(); window.scrollTo(0,0);
-  setTimeout(garantirMapa,150);
+  const alvo = $(VISTAS[v].el); if(alvo) alvo.classList.add('on');
+  desenharTrilha(v);
+  if(v==='inicio'){ renderInicio(); }
+  else if(v==='procs'){ renderProcs(); }
+  else if(v==='admin'){ renderUsuarios(); }
+  else { VISTA='sms'; renderSMS(); setTimeout(garantirMapa,150); }
+  window.scrollTo(0,0);
 }
-function renderVista(){ renderSMS(); }
+function voltarVista(){
+  const anterior = NAV_PILHA.pop() || 'inicio';
+  setVista(anterior, null, true);
+}
+function desenharTrilha(v){
+  const id = VISTAS[v].crumb; if(!id) return;
+  const el = $(id); if(!el) return;
+  const de = NAV_PILHA.length ? VISTAS[NAV_PILHA[NAV_PILHA.length-1]].nome : 'Início';
+  el.innerHTML = `<span class="volta" onclick="voltarVista()">← Voltar para ${esc(de)}</span>
+    <span class="via"><a onclick="setVista('inicio')">⌂ Início</a> › ${esc(VISTAS[v].nome)}</span>`;
+}
+/* ---------- página inicial: escolha do caminho ---------- */
+function renderInicio(){
+  const el = $('inicioBody'); if(!el) return;
+  const nome = (USUARIO && USUARIO.nome) ? USUARIO.nome.split(' ')[0] : '';
+  const hj = hojeISO(), ym = hj.slice(0,7);
+  const doMes = DB.filter(r => (r.data||'').slice(0,7) === ym);
+  let semTxt = '—', semSub = 'semanas cumpridas', pend = null;
+  if(USUARIOS.length){
+    const [i,f] = intervaloDe(ym);
+    const {g} = metasDoIntervalo(i, f, 'comportamental');
+    const t = Object.keys(g).reduce((a,k)=>({real:a.real+g[k].real, meta:a.meta+g[k].meta,
+      faltas:a.faltas+g[k].faltas}), {real:0, meta:0, faltas:0});
+    if(t.meta){ semTxt = t.real+'/'+t.meta; semSub = 'semanas cumpridas no mês'; pend = t.faltas; }
+  }
+  el.innerHTML = `
+    <div class="hero">
+      <h1>${nome ? 'Bom trabalho, '+esc(nome)+'.' : 'Service Conect+'}</h1>
+      <p>Escolha por onde começar. Cada módulo traz os indicadores do seu setor para o mesmo painel de contrato.</p>
+      <div class="res">
+        <div><b>${doMes.length}</b><span>auditorias no mês</span></div>
+        <div><b>${semTxt}</b><span>${semSub}</span></div>
+        <div><b>${USUARIOS.filter(u=>u.ativo).length || '—'}</b><span>no efetivo ativo</span></div>
+        <div><b>${AREAS.length}</b><span>áreas mapeadas</span></div>
+      </div>
+    </div>
+    ${pend ? `<div class="alert al-amber" style="margin-bottom:18px">🎯 <div>
+      <b>${pend} semana(s) sem auditoria</b> em ${mesLbl(ym).toUpperCase()}.
+      <a href="#" onclick="event.preventDefault();setVista('sms');setTimeout(abrirCobranca,400)">Abrir a cobrança</a></div></div>` : ''}
+
+    <div class="secTit">Módulos da plataforma</div>
+    <div class="modgrid">
+      ${MODULOS.map(m=>`
+        <div class="modcard ${m.ativo?'on':'off'}" ${m.ativo?`onclick="setVista('sms')"`:''}>
+          <div class="top">
+            <div class="ic" style="background:${m.cor}">${m.icone}</div>
+            <div><h3>${m.nome}</h3></div>
+          </div>
+          <p>${m.desc}</p>
+          <span class="st ${m.ativo?'on':''}">${m.ativo ? (m.qtd||'em operação') : 'em breve'}</span>
+        </div>`).join('')}
+    </div>
+
+    <div class="secTit">Atalhos</div>
+    <div class="atalhos">
+      <button class="btn" onclick="setVista('procs')">📚 Procedimentos do SGI</button>
+      ${ehAdmin()?`<button class="btn" onclick="setVista('admin')">⚙ Efetivo e Acessos</button>`:''}
+      <button class="btn" onclick="setVista('sms');setTimeout(abrirAgenda,400)">📋 Acompanhamento da semana</button>
+      <button class="btn" onclick="setVista('sms');setTimeout(()=>{const m=$('mapa'); if(m){const c=m.closest('.card')||m; c.scrollIntoView({block:'center'});} garantirMapa();},500)">🗺 Mapa das áreas</button>
+    </div>`;
+}
+function renderVista(){ if(VISTA_ATUAL==='inicio') renderInicio(); else renderSMS(); }
 
 /* ===================== PAINEL · PROCEDIMENTOS ===================== */
 const MODULOS = [
@@ -5630,7 +5755,7 @@ function abrirModulos(){
       Cada setor traz seus próprios indicadores para o mesmo painel de contrato.
       O módulo de SMS está ativo; os demais entram conforme a implantação.</p>
     ${MODULOS.map(m=>`
-      <div class="modrow ${m.ativo?'on':''}" ${m.ativo?`onclick="closeModal();setVista('sms',document.querySelector('#modnav button:nth-child(2)'))"`:''}>
+      <div class="modrow ${m.ativo?'on':''}" ${m.ativo?`onclick="closeModal();setVista('sms')"`:''}>
         <div class="ic" style="background:${m.cor}">${m.icone}</div>
         <div class="tx"><b>${m.nome}</b><span>${m.desc}</span></div>
         ${m.ativo?`<span class="st on">${m.qtd}</span>`:'<span class="st">em breve</span>'}
@@ -5676,7 +5801,8 @@ function netStatus(){
 setInterval(()=>{ try{ netStatus(); }catch(e){} }, 15000);
 window.addEventListener('online',netStatus); window.addEventListener('offline',netStatus);
 
-function aoEntrar(){ renderSMS(); setTimeout(garantirMapa,150); }
+/* após o login a plataforma abre na página inicial, para a pessoa escolher o caminho */
+function aoEntrar(){ NAV_PILHA.length = 0; setVista('inicio', null, true); }
 loadUsuarios(); venceInterinidades(); loadContratos(); loadAreas(); loadDB(); renderSMS(); netStatus();
 aplicaLogos();
 /* Abertura: liga a base ANTES de reaproveitar a sessão salva.
