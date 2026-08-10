@@ -1601,6 +1601,7 @@ async function gravarEfetivoNaNuvem(lista, aoAndar){
         perfilBase:u.perfilBase||u.perfil, ativo:!!u.ativo,
         afastamentos:(u.afastamentos||[]).map(a=>({tipo:a.tipo, de:a.de, ate:a.ate})),
         interinoDe:u.interinoDe||null, interinoAte:u.interinoAte||null, obs:u.obs||'',
+        situacao:u.situacao||'', foraDaLista:u.foraDaLista||null,
         atualizadoEm: firebase.firestore.FieldValue.serverTimestamp()
       }, {merge:true});
     });
@@ -4980,7 +4981,8 @@ function contratosDisponiveis(soComEfetivo){
 }
 
 /* ---------- tela de administração do efetivo (perfil Administrador) ---------- */
-let IMPORT_PREVIA = null, USR_BUSCA = '', USR_PERFIL = '', USR_OS = '', USR_SO_ATIVOS = true;
+let IMPORT_PREVIA = null, IMPORT_REF = null, IMPORT_SAIRAM = 0,
+    USR_BUSCA = '', USR_PERFIL = '', USR_OS = '', USR_SO_ATIVOS = true;
 function ehAdmin(){ return USUARIO && USUARIO.perfil==='admin'; }
 function podePainel(u){ return u && PERFIS[u.perfil] && PERFIS[u.perfil].painel; }
 
@@ -5031,7 +5033,9 @@ function renderUsuarios(){
 
   $('usuariosBody').innerHTML = `
   <div class="dash-head"><div><h1>⚙ Efetivo e Acessos</h1>
-    <p>${USUARIOS.length} pessoa(s) no cadastro · ${USUARIOS.filter(u=>u.ativo).length} ativa(s) · <b>${comAcesso} com acesso ao sistema</b></p></div>
+    <p>${USUARIOS.length} pessoa(s) no cadastro · ${USUARIOS.filter(u=>u.ativo).length} ativa(s) · <b>${comAcesso} com acesso ao sistema</b>${
+      (()=>{ const f = USUARIOS.filter(u=>u.foraDaLista).length;
+        return f ? ` · <span title="Saíram da planilha do efetivo. Ficam no cadastro como inativas para preservar o histórico das auditorias que fizeram." style="color:var(--slate2)">${f} fora da última lista</span>` : ''; })()}</p></div>
     <div class="filters no-print">
       <button class="btn btn-sm btn-p" onclick="abrirImportEfetivo()">⬆ Importar lista de efetivo</button>
       <button class="btn btn-sm" onclick="exportarUsuarios()">⬇ Arquivo para o app de campo</button>
@@ -5374,12 +5378,16 @@ async function lerEfetivo(inp){
     }
     if(!dados.length) throw new Error('Nenhuma linha com matrícula e nome foi encontrada.');
     IMPORT_PREVIA = dados;
+    IMPORT_REF = {arquivo: f.name || 'planilha', quando: hojeISO(), aba: ABA_USADA || ''};
     const porPerfil = {};
     dados.filter(d=>ativoNaLista(d.status)).forEach(d=>{ const p=perfilPorFuncao(d.funcao); porPerfil[p]=(porPerfil[p]||0)+1; });
     const chips = Object.keys(det.mapa).map(k=>`<span class="fchip">${k}: <b>${esc(linhas[det.linha][det.mapa[k]]||'?')}</b></span>`).join('');
     const nAf = dados.filter(d=>d.afastamentos).length;
     const nInt = dados.filter(d=>d.interino).length;
     const nFora = dados.filter(d=>!ativoNaLista(d.status)).length;
+    /* quem já está no cadastro e não aparece nesta planilha vai ser inativado, não apagado */
+    const naPl = new Set(dados.map(d=>soDigitos(d.mat)).filter(Boolean));
+    const vaiSair = USUARIOS.filter(u=>u.ativo && soDigitos(u.mat) && !naPl.has(soDigitos(u.mat)));
     $('efRes').innerHTML = `
       <div class="alert al-green">✅ <div><b>${dados.length} pessoa(s) lida(s)</b> na aba
         <b>${esc(ABA_USADA||'planilha 1')}</b> · cabeçalho na linha ${det.linha+1}${
@@ -5388,6 +5396,12 @@ async function lerEfetivo(inp){
         ${nAf?`<b>${nAf}</b> pessoa(s) com afastamento pelo Status (férias, INSS) — já entram com o período lançado e saem da meta enquanto durar.<br>`:''}
         ${nInt?`<b>${nInt}</b> em função de interinidade.<br>`:''}
         ${nFora?`<b>${nFora}</b> desligado(s)/transferido(s) — entram como inativos, sem acesso.`:''}</div></div>` : ''}
+      ${vaiSair.length ? `<div class="alert al-amber" style="margin-top:10px">🗄 <div>
+        <b>${vaiSair.length} pessoa(s) do cadastro atual não estão nesta planilha.</b>
+        Elas <b>não serão apagadas</b>: ficam inativas, perdem o acesso e saem das metas.
+        O histórico de auditorias delas continua no painel e no relatório formal.
+        ${vaiSair.length<=8 ? '<br><span style="font-size:11.5px">'+vaiSair.map(u=>esc(u.nome)+' ('+esc(u.mat)+')').join(' · ')+'</span>'
+          : '<br><span style="font-size:11.5px">'+vaiSair.slice(0,6).map(u=>esc(u.nome)).join(' · ')+' e outras '+(vaiSair.length-6)+'</span>'}</div></div>` : ''}
       <div style="margin:12px 0"><div class="lb" style="font-size:11px;font-weight:800;color:var(--slate2);
         text-transform:uppercase;letter-spacing:.05em;margin-bottom:7px">Colunas identificadas</div>
         <div style="display:flex;gap:7px;flex-wrap:wrap">${chips}</div></div>
@@ -5406,7 +5420,8 @@ async function lerEfetivo(inp){
 }
 function confirmarImport(){
   const antes = {}; USUARIOS.forEach(u=>antes[soDigitos(u.mat)] = u);
-  USUARIOS = IMPORT_PREVIA.map(d=>{
+  const naPlanilha = new Set(IMPORT_PREVIA.map(d=>soDigitos(d.mat)).filter(Boolean));
+  const novos = IMPORT_PREVIA.map(d=>{
     const a = antes[soDigitos(d.mat)];
     const sug = perfilPorFuncao(d.funcao);
     const novo = {mat:d.mat, nome:d.nome, funcao:d.funcao, os:d.os, ativo:ativoNaLista(d.status),
@@ -5425,6 +5440,25 @@ function confirmarImport(){
     }
     return novo;
   });
+  /* Quem saiu da planilha NÃO é apagado: fica INATIVO, com a marca de quando saiu.
+     Apagar quebraria o histórico — as auditorias já registradas precisam continuar
+     ligadas ao nome, à função e à matrícula de quem as fez, para o relatório formal
+     e para a auditoria da contratante. Inativo sai das metas e perde o acesso. */
+  const ref = IMPORT_REF || {arquivo:'planilha', quando:hojeISO()};
+  const desligados = Object.keys(antes)
+    .filter(m => m && !naPlanilha.has(m))
+    .map(m => {
+      const a = antes[m];
+      return Object.assign({}, a, {
+        ativo: false,
+        foraDaLista: {desde: ref.quando, arquivo: ref.arquivo},
+        situacao: a.situacao && /^(demit|desli|transf|rescis)/i.test(a.situacao)
+                  ? a.situacao : 'Fora da lista de ' + fmtD(ref.quando),
+        interinoAte: null, interinoDe: null
+      });
+    });
+  USUARIOS = novos.concat(desligados);
+  IMPORT_SAIRAM = desligados.length;
   const eu = USUARIO && acharUsuario(USUARIO.mat);
   if(eu && !USUARIOS.some(u=>u.perfil==='admin' && u.ativo)){ eu.perfil = 'admin'; eu.manual = true; }
   else if(USUARIO && !USUARIOS.some(u=>u.perfil==='admin' && u.ativo)){
@@ -5468,6 +5502,10 @@ async function publicarEfetivo(){
         <b>${USUARIOS.length} colaborador(es)</b> na base e <b>${r.criados + r.existentes} de ${comAcesso.length} acesso(s)</b>
         liberado(s) (${r.criados} criado(s) agora, ${r.existentes} já existia(m)${r.erros?', '+r.erros+' com erro':''}).
         <br>${areasOK ? areasOK+' área(s) enviada(s) para a base.' : 'Áreas não enviadas'+(areasErro?': '+esc(areasErro):'')+'.'}</div></div>
+      ${IMPORT_SAIRAM ? `<div class="alert al-blue" style="margin-bottom:14px">🗄 <div>
+        <b>${IMPORT_SAIRAM} pessoa(s) não constam mais na planilha.</b> Não foram apagadas — ficaram
+        <b>inativas</b>, sem acesso ao sistema e fora das metas. As auditorias que elas já fizeram continuam
+        no histórico e no relatório formal, com nome, função e matrícula preservados.</div></div>` : ''}
       ${r.bloqueado ? `<div class="alert al-amber" style="margin-bottom:14px">⏳ <div>
         <b>Faltam ${r.faltam} acesso(s).</b> A base bloqueou a criação de contas por excesso de
         pedidos seguidos deste computador — é uma proteção do Firebase, não um erro do cadastro.
