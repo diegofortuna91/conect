@@ -1184,19 +1184,6 @@ body.logged #login{display:none}
 .pop .cats span{font-size:10.5px;font-weight:800;padding:2px 6px;border-radius:4px}
 .pop .btn{margin-top:10px;width:100%;justify-content:center}
 </style>
-<link rel="manifest" href="painel.webmanifest">
-<meta name="theme-color" content="#3a4a9e">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Conect+ Painel">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="icon" href="icon-192.png">
-<script>
-if('serviceWorker' in navigator){
-  window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
-}
-</script>
 </head>
 <body>
 
@@ -2266,7 +2253,7 @@ function regerarDemo(){
 /* --- Gerador determinístico de dados de demonstração --- */
 /* Com o efetivo importado, os dados de exemplo passam a usar as pessoas reais
    (nome, função e matrícula), para que o realizado bata com a meta por auditor. */
-const _GRP_ROT = {gerencia:'Gerência', sesmt:'SESMT', campo:'Supervisão', cipa:'CIPA'};
+const _GRP_ROT = {gerencia:'Gerência', coord:'Coordenação', sesmt:'SESMT', campo:'Supervisão', cipa:'CIPA'};
 function auditoresDemo(){
   if(typeof USUARIOS==='undefined' || !USUARIOS.length) return null;
   const l = USUARIOS.filter(u=>u.ativo && u.perfil!=='nenhum')
@@ -2333,7 +2320,7 @@ function fotoNC(n){
 function seed(){
   const _aud = auditoresDemo() || [
     ['Silvio Chaves Moreira Junior','Técnico de Segurança do Trabalho','SESMT'],
-    ['Diego Fortuna','Coordenador de SMS','SESMT'],
+    ['Diego Fortuna','Coordenador de SMS','Coordenação'],
     ['Marcos Vinícius Andrade','Supervisor','Supervisão'],
     ['Rafael Nogueira Lima','Encarregado','Supervisão'],
     ['Patrícia Souza Mendes','Gerente / Preposto','Gerência'],
@@ -3737,11 +3724,15 @@ function renderComp(rows){
    Férias, INSS, atestado e afastamentos saem da conta no período; o interino entra.
    ===================================================================== */
 const CADENCIA = {   // auditorias exigidas por dia disponível, por checklist e perfil
-  comportamental: {gerencia:1/30, sesmt:1/7,  campo:1/7,  cipa:1/15},   // PO-SMS-005, item 5.5
-  oal:            {gerencia:0,    sesmt:1/7,  campo:1/7,  cipa:0},      // PO-SMS-003, item 5.1 (semanal nas frentes)
-  s5:             {gerencia:0,    sesmt:1/30, campo:1/30, cipa:0}       // PO-SMS-003, item 5.1 (mensal nas operacionais)
+  comportamental: {gerencia:1/30, coord:1/7,  sesmt:1/7,  campo:1/7,  cipa:1/15},   // PO-SMS-005, item 5.5
+  oal:            {gerencia:0,    coord:1/7,  sesmt:1/7,  campo:1/7,  cipa:0},      // PO-SMS-003, item 5.1 (semanal nas frentes)
+  s5:             {gerencia:0,    coord:1/30, sesmt:1/30, campo:1/30, cipa:0}       // PO-SMS-003, item 5.1 (mensal nas operacionais)
 };
-const GRUPO_META = {gerencia:'Gerência / Preposto', sesmt:'Setor de SMS (SESMT)',
+/* Coordenação NÃO está no PO-SMS-005 item 5.5 — o procedimento lista quatro responsáveis.
+   Ela foi separada do SESMT a pedido da Service, por serem setores distintos. A cadência
+   entrou igual à do SESMT para não mexer nos números; ajuste a linha coord acima se mudar. */
+const GRUPO_META = {gerencia:'Gerência / Preposto', coord:'Coordenação',
+                    sesmt:'Setor de SMS (SESMT)',
                     campo:'Supervisor / Encarregado', cipa:'CIPA / Designado'};
 const TIPOS_AFAST = ['Férias','INSS / Afastamento','Atestado','Treinamento','Suspensão','Outro'];
 const dias = (a,b) => (!a||!b) ? 0 : Math.max(0, Math.round((new Date(b+'T12:00:00') - new Date(a+'T12:00:00'))/86400000) + 1);
@@ -3903,7 +3894,8 @@ function detalharMeta(k){
 }
 function metasFixas(rows){
   const nMeses = ehMes(periodoAtual()) ? 1 : Math.max(1, mesesDoAno(anoDoPeriodo()).length);
-  const M = [['Gerência / Preposto','Gerência',1*nMeses],['Setor de SMS (SESMT)','SESMT',4*nMeses],
+  const M = [['Gerência / Preposto','Gerência',1*nMeses],['Coordenação','Coordenação',4*nMeses],
+             ['Setor de SMS (SESMT)','SESMT',4*nMeses],
              ['Supervisor / Encarregado','Supervisão',4*nMeses],['CIPA / Designado','CIPA',2*nMeses]];
   $('metas').innerHTML = `<div class="hint" style="margin-bottom:10px">Importe a lista de efetivo para
     calcular a meta por auditor, com desconto de férias e afastamentos.</div>` +
@@ -4489,7 +4481,8 @@ function limparFiltro(qual){
    ===================================================================== */
 const PERFIS = {
   campo:    {nome:'Auditor de campo',      desc:'App de campo · registra as auditorias em campo',  cor:'#2f8f9e', app:true,  painel:false},
-  sesmt:    {nome:'SESMT / Coordenação',   desc:'Campo + painel completo do contrato',            cor:'#3a4a9e', app:true,  painel:true},
+  sesmt:    {nome:'SESMT',                 desc:'Campo + painel completo do contrato',            cor:'#3a4a9e', app:true,  painel:true},
+  coord:    {nome:'Coordenação',           desc:'Campo + painel completo do contrato',            cor:'#1f7a8c', app:true,  painel:true},
   gerencia: {nome:'Gerência / Preposto',   desc:'Painel de todos os contratos + a AC do item 5.5', cor:'#6b5b95', app:true,  painel:true},
   admin:    {nome:'Administrador',         desc:'Gerencia usuários, áreas, contratos e procedimentos', cor:'#c8412f', app:true, painel:true},
   nenhum:   {nome:'Sem acesso',            desc:'Consta no efetivo, mas não usa o sistema',        cor:'#8b94ad', app:false, painel:false}
@@ -4509,7 +4502,8 @@ function acharUsuario(mat){
 function perfilPorFuncao(f){
   const t = (f||'').toLowerCase();
   if(/(gerente|ger\.|preposto|diretor)/.test(t)) return 'gerencia';
-  if(/(coorden|coord\.|sesmt|\bsms\b|enfermeir|m[ée]dico do trabalho)/.test(t)) return 'sesmt';
+  if(/(coorden|coord\.)/.test(t)) return 'coord';                       // Coordenação é setor próprio
+  if(/(sesmt|\bsms\b|enfermeir|m[ée]dico do trabalho)/.test(t)) return 'sesmt';
   if(/seguran/.test(t)) return /observador/.test(t) ? 'campo' : 'sesmt';
   if(/(supervisor|sup\.|encarregad|enc\.|mestre|l[íi]der|lider|inspetor|insp\.|apontador|cipa|planejador|t[ée]c\.\s*de\s*seg)/.test(t))
     return 'campo';
@@ -4796,6 +4790,7 @@ function renderUsuarios(){
       <th>Perfil</th><th>App de campo</th><th>Painel</th><th>Abrangência</th><th>Efetivo e cadastros</th></tr></thead><tbody>
       ${[['campo','Sim — faz auditorias','Não','Os próprios registros no aparelho','Não'],
          ['sesmt','Sim','Completo','Todos os contratos','Não'],
+         ['coord','Sim','Completo','Todos os contratos','Não'],
          ['gerencia','Sim — a AC mensal do item 5.5','Somente leitura','Todos os contratos','Não'],
          ['admin','Sim','Completo','Todos os contratos','Sim — importa efetivo, áreas e perfis']]
         .map(([k,a,b,c,d])=>`<tr>

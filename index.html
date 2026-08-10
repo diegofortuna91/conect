@@ -541,19 +541,6 @@ body.logged #login{display:none}
   background:#fbfdfe;border:2px dashed var(--line);cursor:pointer}
 .thumb.add:hover{border-color:var(--navy3);color:var(--navy)}
 </style>
-<link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#3a4a9e">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Conect+ Campo">
-<link rel="apple-touch-icon" href="apple-touch-icon.png">
-<link rel="icon" href="icon-192.png">
-<script>
-if('serviceWorker' in navigator){
-  window.addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
-}
-</script>
 </head>
 <body>
 
@@ -993,7 +980,7 @@ const FUNCOES = ['Técnico de Segurança do Trabalho','Engenheiro de Segurança'
 /* O.S do contrato. A importação do efetivo sobrescreve esta lista; ela existe
    para o aparelho que ainda não recebeu o arquivo de usuários. */
 const CONTRATOS = ['OS.067 - Facilites','OS.068 - Caldeiraria'];
-const APP_VER = '4.0 · 09/08/2026';   // aparece no diagnóstico e no rodapé do menu
+const APP_VER = '4.1 · 10/08/2026';   // aparece no diagnóstico e no rodapé do menu
 
 /* ---------- Áreas georreferenciadas (importadas do Google Earth / KML) ---------- */
 /* Demonstração — substituída integralmente ao importar o KML da refinaria. */
@@ -1283,7 +1270,8 @@ const PROCEDIMENTOS = [
    ===================================================================== */
 const PERFIS = {
   campo:    {nome:'Auditor de campo',      desc:'App de campo · vê apenas os próprios registros', cor:'#2f8f9e', app:true,  painel:false},
-  sesmt:    {nome:'SESMT / Coordenação',   desc:'Campo + painel completo do contrato',            cor:'#3a4a9e', app:true,  painel:true},
+  sesmt:    {nome:'SESMT',                 desc:'Campo + painel completo do contrato',            cor:'#3a4a9e', app:true,  painel:true},
+  coord:    {nome:'Coordenação',           desc:'Campo + painel completo do contrato',            cor:'#1f7a8c', app:true,  painel:true},
   gerencia: {nome:'Gerência / Preposto',   desc:'Painel + a auditoria mensal do item 5.5',        cor:'#6b5b95', app:true,  painel:true},
   admin:    {nome:'Administrador',         desc:'Gerencia usuários, áreas, contratos e procedimentos', cor:'#c8412f', app:true, painel:true},
   nenhum:   {nome:'Sem acesso',            desc:'Consta no efetivo, mas não usa o sistema',        cor:'#8b94ad', app:false, painel:false}
@@ -1301,10 +1289,11 @@ function acharUsuario(mat){
 /* perfil sugerido a partir da função descrita na lista de efetivo */
 function perfilPorFuncao(f){
   const t = (f||'').toLowerCase();
-  if(/(gerente|preposto|diretor)/.test(t)) return 'gerencia';
-  if(/(coorden|sesmt|\bsms\b|enfermeir|m[ée]dico do trabalho)/.test(t)) return 'sesmt';
+  if(/(gerente|ger\.|preposto|diretor)/.test(t)) return 'gerencia';
+  if(/(coorden|coord\.)/.test(t)) return 'coord';                       // Coordenação é setor próprio
+  if(/(sesmt|\bsms\b|enfermeir|m[ée]dico do trabalho)/.test(t)) return 'sesmt';
   if(/seguran/.test(t)) return /observador/.test(t) ? 'campo' : 'sesmt';
-  if(/(supervisor|encarregad|mestre|l[íi]der|lider|inspetor|apontador|cipa|planejador)/.test(t)) return 'campo';
+  if(/(supervisor|sup\.|encarregad|enc\.|mestre|l[íi]der|lider|inspetor|insp\.|apontador|cipa|planejador|t[ée]c\.\s*de\s*seg)/.test(t)) return 'campo';
   return 'nenhum';
 }
 const ativoNaLista = st => /^ativ/i.test(String(st||'').trim());
