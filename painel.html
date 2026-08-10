@@ -5378,7 +5378,28 @@ window.addEventListener('online',netStatus); window.addEventListener('offline',n
 function aoEntrar(){ renderSMS(); setTimeout(garantirMapa,150); }
 loadUsuarios(); venceInterinidades(); loadContratos(); loadAreas(); loadDB(); renderSMS(); netStatus();
 aplicaLogos();
-const _u = sessaoSalva(); if(_u) aplicarSessao(_u); else setTimeout(()=>{ const e=$('lgUser'); e&&e.focus(); },120);
+/* Abertura: liga a base ANTES de reaproveitar a sessão salva.
+   Sem isso, quem já estava logado abria o painel com a nuvem desligada e recebia
+   "sem conexão com a base" em tudo (republicar áreas, importar efetivo, ouvir auditorias). */
+(async function abrirPainel(){
+  const _u = sessaoSalva();
+  const pronta = await iniciarNuvem();
+  netStatus();
+  if(!_u){ setTimeout(()=>{ const e=$('lgUser'); e&&e.focus(); },120); return; }
+  if(!pronta){                                  // sem base: mostra o painel, mas em leitura local
+    aplicarSessao(_u); netStatus(); return;
+  }
+  const fbUser = await sessaoNuvem();
+  if(!fbUser){                                  // sessão antiga sem login validado na base
+    store.set('sms_usuario','');
+    setTimeout(()=>{ const e=$('lgUser'); e&&e.focus(); },120);
+    toast('Entre novamente para reconectar à base de dados');
+    netStatus(); return;
+  }
+  aplicarSessao(_u); aoEntrar();
+  try{ ouvirAuditorias(); baixarEfetivoNuvem(); baixarAreasNuvem(); }catch(e){}
+  netStatus();
+})();
 
 const REL_CSS = `
   @page{size:A4;margin:13mm 12mm}
