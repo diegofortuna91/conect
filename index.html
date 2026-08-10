@@ -980,7 +980,7 @@ const FUNCOES = ['Técnico de Segurança do Trabalho','Engenheiro de Segurança'
 /* O.S do contrato. A importação do efetivo sobrescreve esta lista; ela existe
    para o aparelho que ainda não recebeu o arquivo de usuários. */
 const CONTRATOS = ['OS.067 - Facilites','OS.068 - Caldeiraria'];
-const APP_VER = '4.3 · 10/08/2026';   // aparece no diagnóstico e no rodapé do menu
+const APP_VER = '5.0 · 10/08/2026';   // aparece no diagnóstico e no rodapé do menu
 
 /* ---------- Áreas georreferenciadas (importadas do Google Earth / KML) ---------- */
 /* Demonstração — substituída integralmente ao importar o KML da refinaria. */
@@ -1648,6 +1648,7 @@ function validarOAL(){
   if(step===0){
     if(!F.auditor.trim()) return toast('Informe o responsável pela verificação'),false;
     if(!F.area.trim()) return toast('Selecione o setor / área'),false;
+    if(repeticaoBloqueia()) return false;
   }
   if(step===1){
     const o = resultadoOAL(F);
@@ -1798,6 +1799,7 @@ function validar5S(){
   if(step===0){
     if(!F.auditor.trim()) return toast('Informe o responsável / auditor'),false;
     if(!F.area.trim()) return toast('Selecione o setor / área'),false;
+    if(repeticaoBloqueia()) return false;
   }
   if(step===n-2){
     const r = resultado5S(F);
@@ -1843,8 +1845,10 @@ function novaAuditoria(tipo){
     acaoPosterior:'Não', acaoPosteriorDesc:'', assinaturas:{}, gps:null, areaOutra:false, areaGPS:null, areaProxima:null, areaDist:null, sync:false,
     criadoEm:new Date().toISOString(),
     tipo:TIPO, tipoNome:TIPOS[TIPO].nome, tipoCod:TIPOS[TIPO].cod,
-    verif:{}, obsNC:{}, fotosNC:{}, notas:{}, escopo:'completa'
+    verif:{}, obsNC:{}, fotosNC:{}, notas:{}, escopo:'completa',
+    repeticaoMotivo:'', repeticaoDe:''
   };
+  REP.repetida = false; REP.semAnterior = ''; REP.chave = ''; REP.checando = false;
   if(USUARIO){
     F.matricula = USUARIO.mat; F.perfilAuditor = USUARIO.perfil;
     if(!F.auditor && USUARIO.nome && !/^\d+$/.test(USUARIO.nome) && !/^Matr[íi]cula /i.test(USUARIO.nome)) F.auditor = USUARIO.nome;
@@ -1881,6 +1885,7 @@ function validar(){
   if(step===0){
     if(!F.auditor.trim()) return toast('Informe o nome do auditor'),false;
     if(!F.area.trim()) return toast('Informe o setor / área'),false;
+    if(repeticaoBloqueia()) return false;
     if(!F.atividade.trim()) return toast('Informe a atividade observada'),false;
     if(!F.pessoas) return toast('Informe o nº de pessoas observadas'),false;
   }
@@ -2078,7 +2083,89 @@ function areaExtraHTML(){
   return (nova ? `<div class="area-nova">🆕 <div><b>Área nova:</b> “${esc(F.area.trim())}”.
       Vai junto com a auditoria para o administrador incluir no cadastro,
       com o seu nome como responsável pela inclusão.</div></div>` + hintAreaNova() : '')
-    + statusArea();
+    + statusArea() + avisoRepeticaoHTML();
+}
+/* =====================================================================
+   GIRO DE ÁREAS — regra da coordenação de SMS
+   A auditoria da semana tem de ser em uma frente diferente da semana passada,
+   para o rastreamento de desvios não ficar concentrado no mesmo lugar.
+   Repetir é permitido, mas exige justificativa escrita — que vai no registro
+   e aparece no painel do administrador.
+   ===================================================================== */
+const REP = {checando:false, repetida:false, area:'', semAnterior:'', chave:''};
+
+function somaDiasISO(iso, n){
+  const d = new Date(iso+'T12:00:00'); d.setDate(d.getDate() + n);
+  return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+}
+function segundaDa(iso){                 // segunda-feira da semana ISO de uma data
+  const d = new Date(iso+'T12:00:00');
+  return somaDiasISO(iso, -((d.getDay()+6) % 7));
+}
+function semanaAnteriorDe(iso){
+  const seg = segundaDa(iso);
+  return [somaDiasISO(seg,-7), somaDiasISO(seg,-1)];
+}
+/* auditorias do próprio auditor no mesmo checklist, na semana anterior.
+   Tenta a base (a fonte real, se ele trocou de aparelho) e cai para o histórico local. */
+async function auditoriasSemanaAnterior(mat, tipo, dataRef){
+  const [de, ate] = semanaAnteriorDe(dataRef || hojeISO());
+  const m = String(mat||'').replace(/\D/g,'');
+  if(NUVEM.pronta && FS && m){
+    try{
+      const q = await FS.collection('auditorias')
+        .where('matricula','==', m).where('data','>=', de).where('data','<=', ate).get();
+      const l = q.docs.map(d=>d.data()).filter(r=>(r.tipo||'comportamental')===tipo);
+      if(l.length || navigator.onLine) return l;
+    }catch(e){ /* sem índice ou sem rede: usa o histórico local */ }
+  }
+  return (DB||[]).filter(r => (r.tipo||'comportamental')===tipo
+    && r.data>=de && r.data<=ate
+    && String(r.matricula||'').replace(/\D/g,'')===m);
+}
+async function checarRepeticaoArea(){
+  const area = (F.area||'').trim();
+  const mat = (USUARIO && USUARIO.mat) || F.matricula || '';
+  REP.area = area;
+  if(!area || !mat){ REP.repetida = false; REP.semAnterior = ''; atualizaAreaExtra(); return; }
+  const chave = mat+'|'+TIPO+'|'+F.data+'|'+normTxt(area);
+  if(REP.chave === chave) return;                 // já checado para esta combinação
+  REP.chave = chave; REP.checando = true; atualizaAreaExtra();
+  let l = [];
+  try{ l = await auditoriasSemanaAnterior(mat, TIPO, F.data); }catch(e){}
+  l.sort((a,b)=> (a.data+(a.horaIni||'')) < (b.data+(b.horaIni||'')) ? -1 : 1);
+  const anterior = l.length ? (l[0].area||'') : '';
+  REP.semAnterior = anterior;
+  REP.repetida = !!(anterior && normTxt(anterior) === normTxt(area));
+  REP.checando = false;
+  atualizaAreaExtra();
+}
+function avisoRepeticaoHTML(){
+  if(REP.checando)
+    return `<div class="hint">⏳ Conferindo onde você auditou na semana passada…</div>`;
+  if(!REP.repetida) {
+    if(REP.semAnterior && (F.area||'').trim())
+      return `<div class="hint" style="color:var(--green);font-weight:700">✓ Área diferente da semana passada
+        (você auditou <b>${esc(REP.semAnterior)}</b>).</div>`;
+    return '';
+  }
+  return `<div class="area-nova" style="background:#fdf2e2;border-color:#e8b563;color:#8a5a12">⚠
+    <div style="font-weight:400">
+    <b style="color:#8a5a12">Você já auditou “${esc(REP.semAnterior)}” na semana passada.</b>
+    A regra é auditar uma frente diferente cada semana, para ampliar o alcance do rastreamento de desvios.
+    <br>Se não houver outra frente possível, escreva o motivo abaixo — ele vai gravado no registro e o
+    administrador vê no painel.
+    <textarea class="inp" id="repMotivo" rows="2" style="margin-top:8px;color:#1c2333"
+      placeholder="Ex.: única frente ativa da O.S nesta semana"
+      oninput="F.repeticaoMotivo=this.value">${esc(F.repeticaoMotivo||'')}</textarea></div></div>`;
+}
+/* chamado pelos validadores: trava o avanço enquanto a repetição não tiver motivo */
+function repeticaoBloqueia(){
+  if(!REP.repetida) return false;
+  if(((F.repeticaoMotivo||'').trim()).length >= 10) return false;
+  toast('Escreva o motivo de repetir a área da semana passada (mínimo 10 letras)');
+  const t = $('repMotivo'); if(t) t.focus();
+  return true;
 }
 function atualizaAreaExtra(){ const e = $('areaExtra'); if(e) e.innerHTML = areaExtraHTML(); }
 function areaAbrir(){ areaRenderLista(($('areaInp')||{}).value||''); }
@@ -2121,17 +2208,19 @@ function areaDigitou(v){
   F.areaOutra = !!v.trim() && !areaCadastrada(v);
   areaRenderLista(v);
   atualizaAreaExtra();
+  checarRepeticaoArea();
 }
 function areaEscolher(n){
   F.area = n; F.areaOutra = false;
   const i = $('areaInp'); if(i) i.value = n;
   areaFechar(); detectarArea(); atualizaAreaExtra();
+  checarRepeticaoArea();
 }
 function areaCriar(){
   const v = (($('areaInp')||{}).value||'').trim();
   if(!v) return;
   F.area = v; F.areaOutra = true;
-  areaFechar(); atualizaAreaExtra();
+  areaFechar(); atualizaAreaExtra(); checarRepeticaoArea();
   toast('“'+v+'” será enviada para cadastro do administrador');
 }
 document.addEventListener('click', e=>{
@@ -2429,6 +2518,9 @@ function finalizar(){
     cl = classificar(F.desvios);
   }
   F.classificacao = cl.k;
+  /* giro de áreas: se repetiu a frente da semana passada, o motivo viaja com o registro */
+  if(REP.repetida){ F.repeticaoDe = REP.semAnterior; }
+  else { F.repeticaoMotivo = ''; F.repeticaoDe = ''; }
   if(F.areaOutra && (F.area||'').trim()){
     F.area = F.area.trim();
     F.areaNova = {nome:F.area, lat:F.gps?+F.gps.lat:null, lng:F.gps?+F.gps.lng:null,
