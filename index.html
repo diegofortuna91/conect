@@ -4,6 +4,12 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0e2a3d">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<meta name="apple-mobile-web-app-title" content="Conect+ Campo">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Service Conect+ — Coleta em Campo</title>
 <style>
@@ -494,6 +500,11 @@ body.logged #login{display:none}
 .lg-card .hint2{text-align:center;color:#a9b6e2;font-size:13px;margin:6px 0 22px}
 .lg-lb{display:block;font-size:11.5px;font-weight:800;color:#9fb0e8;margin-bottom:6px;
   text-transform:uppercase;letter-spacing:.09em}
+
+.lg-inst{display:none;margin:14px auto 0;padding:10px 18px;border-radius:12px;
+  background:rgba(159,204,71,.14);border:1px solid rgba(159,204,71,.5);
+  color:#dcefc0;font-family:inherit;font-size:13px;font-weight:700;cursor:pointer}
+.lg-inst:active{background:rgba(159,204,71,.26)}
 .lg-inp{
   width:100%;padding:12px 14px;border:1px solid rgba(255,255,255,.18);border-radius:9px;
   background:rgba(10,16,40,.5);color:#fff;outline:none;font-size:15px;margin-bottom:16px;transition:.15s;
@@ -657,6 +668,7 @@ body.logged #login{display:none}
   <text x="24" y="41" font-size="6.2" fill="#9fb0e8" text-anchor="middle" font-family="Lato,sans-serif" font-weight="700">SELO</text>
 </svg>Empresa <b>DuBem Diamante 2025</b><br>Obras Sociais Irmã Dulce</div>
     </form>
+    <button class="lg-inst" id="btInstalar" type="button" onclick="instalarApp()">⤓ Instalar no aparelho</button>
     <div class="lg-copy">Service Conect+ · Service Engenharia · <a href="#" onclick="event.preventDefault()">Privacidade</a></div>
   </div>
 </div>
@@ -1061,7 +1073,7 @@ const FUNCOES = ['Técnico de Segurança do Trabalho','Engenheiro de Segurança'
 /* O.S do contrato. A importação do efetivo sobrescreve esta lista; ela existe
    para o aparelho que ainda não recebeu o arquivo de usuários. */
 const CONTRATOS = ['OS.067 - Facilites','OS.068 - Caldeiraria'];
-const APP_VER = '5.6 · 11/08/2026';   // aparece no diagnóstico e no rodapé do menu
+const APP_VER = '5.7 · 11/08/2026';   // aparece no diagnóstico e no rodapé do menu
 
 /* ---------- Áreas georreferenciadas (importadas do Google Earth / KML) ---------- */
 /* Demonstração — substituída integralmente ao importar o KML da refinaria. */
@@ -3491,6 +3503,46 @@ document.addEventListener('visibilitychange', () => {
   if(document.body.classList.contains('logged')) return;
   animaLogin(!document.hidden);
 });
+
+/* ---------- modo aplicativo ----------
+   Registra o service worker: é ele que guarda o app no aparelho e faz o Chrome
+   reconhecer a página como aplicativo instalável. Só roda servido por http(s):
+   aberto como arquivo local não há service worker, e não há por que reclamar. */
+if('serviceWorker' in navigator && location.protocol.indexOf('http') === 0){
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('sw.js').catch(function(){});
+  });
+}
+
+/* O Chrome avisa quando a instalação é possível; guardamos o convite e
+   mostramos o botão. Depois de instalado o evento não vem mais, e o botão
+   simplesmente não aparece. */
+let CONVITE_INSTALAR = null;
+window.addEventListener('beforeinstallprompt', function(e){
+  e.preventDefault();
+  CONVITE_INSTALAR = e;
+  const b = document.getElementById('btInstalar');
+  if(b) b.style.display = 'block';
+});
+window.addEventListener('appinstalled', function(){
+  CONVITE_INSTALAR = null;
+  const b = document.getElementById('btInstalar');
+  if(b) b.style.display = 'none';
+});
+async function instalarApp(){
+  if(!CONVITE_INSTALAR){
+    toast('Use o menu do navegador (⋮) e escolha Instalar aplicativo');
+    return;
+  }
+  CONVITE_INSTALAR.prompt();
+  try{ await CONVITE_INSTALAR.userChoice; }catch(e){}
+  CONVITE_INSTALAR = null;
+}
+/* modo aplicativo já em uso: não faz sentido oferecer instalação */
+function jaEhApp(){
+  return window.matchMedia('(display-mode: standalone)').matches
+      || window.navigator.standalone === true;
+}
 </script>
 </body>
 </html>
