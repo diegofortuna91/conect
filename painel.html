@@ -1269,6 +1269,14 @@ body.logged #login{display:none}
   .lg-flow .et,.lg-flow .et i,.lg-flow .ln,.lg-orb .n .d{animation:none}
   .lg-grade{transform:rotateX(77deg)}
 }
+
+/* selo do modo demonstração — sempre visível, para ninguém confundir exemplo com real */
+#seloDemo{position:fixed;left:12px;bottom:12px;z-index:9998;pointer-events:none;
+  background:#e8963c;color:#3b2405;font-size:11px;font-weight:700;letter-spacing:.02em;
+  padding:7px 13px;border-radius:20px;box-shadow:0 3px 12px rgba(0,0,0,.22);
+  font-family:inherit;max-width:calc(100vw - 24px)}
+#seloDemo b{font-weight:800}
+@media(max-width:640px){ #seloDemo{font-size:10px;padding:6px 10px;left:8px;bottom:8px} }
 .lg{
   min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
   padding:38px 20px;position:relative;overflow:hidden;
@@ -1803,6 +1811,7 @@ function estadoNuvem(){
   return {ok:true, curto:'conectada', motivo:''};
 }
 async function gravarEfetivoNaNuvem(lista, aoAndar){
+  if(bloqueadoNaDemo()) return;
   const st = estadoNuvem();
   if(!st.ok){ const e = new Error(st.motivo); e.diag = st; throw e; }
   const N = 400; let feitos = 0;
@@ -1832,6 +1841,7 @@ async function gravarEfetivoNaNuvem(lista, aoAndar){
    continua de onde parou, porque quem já existe volta como 'email-already-in-use'. */
 const espera = ms => new Promise(r => setTimeout(r, ms));
 async function criarAcessos(lista, aoAndar){
+  if(bloqueadoNaDemo()) return;
   const sec = firebase.apps.find(a=>a.name==='criador') || firebase.initializeApp(FB_CFG, 'criador');
   const auth2 = sec.auth();
   let criados = 0, existentes = 0, erros = 0, i = 0, bloqueado = false, ultimoErro = '';
@@ -2444,6 +2454,26 @@ let DB = [];
 function saveDB(){ store.set('sms_auditorias', JSON.stringify(DB)); }
 /* Em operação real o painel não gera mais nada de exemplo: só o que veio do campo. */
 let SEM_DEMO = store.get('sms_sem_demo') === '1';
+/* ---------- modo demonstração ----------
+   Link aberto para apresentar o sistema: entra como visitante, com dados de
+   exemplo, e não grava nada na base. Vale só quando o endereço traz ?demo=1 —
+   o acesso normal continua exigindo matrícula e senha. */
+const DEMO = /(?:^|[?&])demo=1(?:&|$)/.test(location.search) || location.hash === '#demo';
+const VISITA = {mat:'DEMO', nome:'ACELEN \u00b7 Visitante', perfil:'visita', os:'',
+                funcao:'Demonstra\u00e7\u00e3o', demo:true};
+function seloDemo(){
+  if(!DEMO || document.getElementById('seloDemo')) return;
+  const d = document.createElement('div');
+  d.id = 'seloDemo';
+  d.innerHTML = '<b>MODO DEMONSTRA\u00c7\u00c3O</b> \u00b7 dados de exemplo \u00b7 nada \u00e9 gravado na base';
+  document.body.appendChild(d);
+}
+function bloqueadoNaDemo(){
+  if(!DEMO) return false;
+  toast('Modo demonstra\u00e7\u00e3o: esta a\u00e7\u00e3o est\u00e1 desativada');
+  return true;
+}
+
 function loadDB(){
   const raw = store.get('sms_auditorias'), v = store.get('sms_dados_ver');
   if(raw && (v===DADOS_VER || SEM_DEMO)){ try{ DB = JSON.parse(raw); if(DB.length || SEM_DEMO) return; }catch(e){} }
@@ -2451,6 +2481,7 @@ function loadDB(){
   regerarDemo();
 }
 function entrarEmOperacao(){
+  if(bloqueadoNaDemo()) return;
   openModal('Começar a operação real', `
     <div class="alert al-amber" style="margin-bottom:14px">🚦 <div>
       Isto apaga <b>todos os dados de demonstração</b> do painel. Ficam apenas as auditorias
@@ -2463,6 +2494,7 @@ function entrarEmOperacao(){
       <button class="btn" onclick="closeModal()">Cancelar</button></div>`);
 }
 function confirmarOperacao(){
+  if(bloqueadoNaDemo()) return;
   SEM_DEMO = true; store.set('sms_sem_demo','1');
   DB = DB.filter(r=>r.origem === 'campo');
   /* a virada de chave é o marco da cobrança: semanas anteriores a hoje deixam de
@@ -2477,6 +2509,7 @@ function confirmarOperacao(){
   toast('Operação real a partir de ' + fmtD(VIGENCIA) + ' — a cobrança das semanas começa hoje');
 }
 function voltarDemonstracao(){
+  if(bloqueadoNaDemo()) return;
   SEM_DEMO = false; store.set('sms_sem_demo','');
   regerarDemo(); renderSMS(); closeModal();
   toast('Dados de demonstração recarregados');
@@ -5034,6 +5067,7 @@ const PERFIS = {
   coord:    {nome:'Coordenação',           desc:'Campo + painel completo do contrato',            cor:'#1f7a8c', app:true,  painel:true},
   gerencia: {nome:'Gerência / Preposto',   desc:'Painel de todos os contratos + a AC do item 5.5', cor:'#6b5b95', app:true,  painel:true},
   admin:    {nome:'Administrador',         desc:'Gerencia usuários, áreas, contratos e procedimentos', cor:'#c8412f', app:true, painel:true},
+  visita:   {nome:'Visitante \u00b7 demonstra\u00e7\u00e3o', desc:'Somente leitura, com dados de exemplo', cor:'#e8963c', app:true, painel:true},
   nenhum:   {nome:'Sem acesso',            desc:'Consta no efetivo, mas não usa o sistema',        cor:'#8b94ad', app:false, painel:false}
 };
 let USUARIOS = [];
@@ -5709,6 +5743,7 @@ async function lerEfetivo(inp){
   }
 }
 function confirmarImport(){
+  if(bloqueadoNaDemo()) return;
   const antes = {}; USUARIOS.forEach(u=>antes[soDigitos(u.mat)] = u);
   const naPlanilha = new Set(IMPORT_PREVIA.map(d=>soDigitos(d.mat)).filter(Boolean));
   const novos = IMPORT_PREVIA.map(d=>{
@@ -6124,6 +6159,12 @@ aplicaLogos();
    Sem isso, quem já estava logado abria o painel com a nuvem desligada e recebia
    "sem conexão com a base" em tudo (republicar áreas, importar efetivo, ouvir auditorias). */
 (async function abrirPainel(){
+  if(DEMO){                                   // demonstração: nem toca na base
+    SEM_DEMO = false; store.set('sms_sem_demo','');
+    if(!DB.length) regerarDemo();
+    aplicarSessao(VISITA); aoEntrar(); seloDemo(); renderSMS();
+    return;
+  }
   const _u = sessaoSalva();
   const pronta = await iniciarNuvem();
   netStatus();

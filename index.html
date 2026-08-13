@@ -513,6 +513,14 @@ body.logged #login{display:none}
   .lg-flow .et,.lg-flow .et i,.lg-flow .ln,.lg-orb .n .d{animation:none}
   .lg-grade{transform:rotateX(77deg)}
 }
+
+/* selo do modo demonstração — sempre visível, para ninguém confundir exemplo com real */
+#seloDemo{position:fixed;left:12px;bottom:12px;z-index:9998;pointer-events:none;
+  background:#e8963c;color:#3b2405;font-size:11px;font-weight:700;letter-spacing:.02em;
+  padding:7px 13px;border-radius:20px;box-shadow:0 3px 12px rgba(0,0,0,.22);
+  font-family:inherit;max-width:calc(100vw - 24px)}
+#seloDemo b{font-weight:800}
+@media(max-width:640px){ #seloDemo{font-size:10px;padding:6px 10px;left:8px;bottom:8px} }
 .lg{
   min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;
   padding:calc(38px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right))
@@ -867,6 +875,26 @@ const DOMINIO_LOGIN = '@conect.service';
 
 let FS = null;                                   // instância do Firestore
 const NUVEM = {pronta:false, tentou:false, online:false, erro:'', usuario:null};
+/* ---------- modo demonstração ----------
+   Link aberto para apresentar o sistema: entra como visitante, com dados de
+   exemplo, e não grava nada na base. Vale só quando o endereço traz ?demo=1 —
+   o acesso normal continua exigindo matrícula e senha. */
+const DEMO = /(?:^|[?&])demo=1(?:&|$)/.test(location.search) || location.hash === '#demo';
+const VISITA = {mat:'DEMO', nome:'ACELEN \u00b7 Visitante', perfil:'visita', os:'',
+                funcao:'Demonstra\u00e7\u00e3o', demo:true};
+function seloDemo(){
+  if(!DEMO || document.getElementById('seloDemo')) return;
+  const d = document.createElement('div');
+  d.id = 'seloDemo';
+  d.innerHTML = '<b>MODO DEMONSTRA\u00c7\u00c3O</b> \u00b7 dados de exemplo \u00b7 nada \u00e9 gravado na base';
+  document.body.appendChild(d);
+}
+function bloqueadoNaDemo(){
+  if(!DEMO) return false;
+  toast('Modo demonstra\u00e7\u00e3o: esta a\u00e7\u00e3o est\u00e1 desativada');
+  return true;
+}
+
 
 function emailDaMatricula(mat){
   return String(mat||'').replace(/\D/g,'') + DOMINIO_LOGIN;
@@ -945,6 +973,7 @@ function msgErroLogin(e){
 
 /* ---------- envio das auditorias para a base ---------- */
 async function enviarParaNuvem(reg){
+  if(DEMO) return false;                      // demonstração não escreve na base
   if(!NUVEM.pronta || !firebase.auth().currentUser) return false;
   const {fotos, ptFoto, fotosNC, ...leve} = reg;
   const doc = FS.collection('auditorias').doc(reg.id);
@@ -968,6 +997,7 @@ async function enviarParaNuvem(reg){
   return true;
 }
 async function sincronizarNuvem(silencioso){
+  if(DEMO){ if(!silencioso) toast('Modo demonstra\u00e7\u00e3o \u2014 o registro fica s\u00f3 neste aparelho'); return; }
   const fila = DB.filter(r=>!r.sync);
   if(!fila.length){ if(!silencioso) toast('Nada pendente para enviar'); return; }
   if(!NUVEM.pronta || !firebase.auth().currentUser){
@@ -1023,6 +1053,7 @@ async function baixarAreas(){
   }catch(e){}
 }
 async function enviarAreaNova(a){
+  if(DEMO) return false;
   if(!NUVEM.pronta || !firebase.auth().currentUser || !a) return;
   try{
     await FS.collection('areas').doc('campo-' + a.nome.toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,60)).set({
@@ -1136,7 +1167,7 @@ const FUNCOES = ['Técnico de Segurança do Trabalho','Engenheiro de Segurança'
 /* O.S do contrato. A importação do efetivo sobrescreve esta lista; ela existe
    para o aparelho que ainda não recebeu o arquivo de usuários. */
 const CONTRATOS = ['OS.067 - Facilites','OS.068 - Caldeiraria'];
-const APP_VER = '5.8 · 12/08/2026';   // aparece no diagnóstico e no rodapé do menu
+const APP_VER = '5.9 · 13/08/2026';   // aparece no diagnóstico e no rodapé do menu
 
 /* ---------- Áreas georreferenciadas (importadas do Google Earth / KML) ---------- */
 /* Demonstração — substituída integralmente ao importar o KML da refinaria. */
@@ -3173,9 +3204,10 @@ function aplicaUsuarioNaAuditoria(){
   if(USUARIO.os) F.contrato = USUARIO.os;
 }
 loadUsuarios(); venceInterinidades(); loadContratos(); loadAreas(); loadDB(); novaAuditoria('comportamental'); netStatus(); aplicaLogos(); atualizaContador(); renderHub(); avisoContexto(); statusEfetivo();
-const _u = sessaoSalva(); if(_u){ aplicarSessao(_u); aoEntrar(); } else setTimeout(()=>{ const e=$('lgUser'); e&&e.focus(); },120);
+if(DEMO){ aplicarSessao(VISITA); aoEntrar(); seloDemo(); }
+else { const _u = sessaoSalva(); if(_u){ aplicarSessao(_u); aoEntrar(); } else setTimeout(()=>{ const e=$('lgUser'); e&&e.focus(); },120); }
 /* liga na base assim que o app abre: confere a sessão, baixa áreas e envia o que ficou pendente */
-iniciarNuvem().then(async ok => {
+if(!DEMO) iniciarNuvem().then(async ok => {
   statusEfetivo();
   if(!ok) return;
   const su = await sessaoNuvem();
