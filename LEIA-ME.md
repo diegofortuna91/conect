@@ -1,4 +1,4 @@
-# Service Conect+ — publicar no GitHub Pages e instalar no iPhone
+# Service Connect — publicar no GitHub Pages e instalar no iPhone
 
 Este pacote deixa o aplicativo no ar num endereço `https`, que é o que o iPhone exige
 para liberar **GPS, câmera e o salvamento das auditorias no aparelho**.

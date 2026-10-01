@@ -1,6 +1,6 @@
 {
-  "name": "Service Conect+ · Painel",
-  "short_name": "Conect+ Painel",
+  "name": "Service Connect · Painel",
+  "short_name": "Connect Painel",
   "description": "Painel de indicadores do módulo SMS — auditorias, desvios, metas e efetivo.",
   "id": "./painel.html",
   "start_url": "./painel.html",

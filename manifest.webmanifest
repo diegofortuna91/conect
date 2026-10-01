@@ -1,6 +1,6 @@
 {
-  "name": "Service Conect+ · Campo",
-  "short_name": "Conect+ Campo",
+  "name": "Service Connect · Campo",
+  "short_name": "Connect Campo",
   "description": "Coleta em campo dos checklists de SMS — Avaliação Comportamental, OAL e 5S. Funciona sem sinal.",
   "id": "./index.html",
   "start_url": "./index.html",
