@@ -1407,7 +1407,7 @@ body.logged #login{display:none}
     <img class="lg-logo-img" id="lgLogo" alt="Service Engenharia">
         <div class="lg-tag">Gestão e Controle de Contrato</div>
     <p class="lg-sub2">Plataforma de <b>gestão e controle de contrato</b>. Todos os setores, os mesmos indicadores, um só lugar.</p>
-    <div class="lg-orb"><div class="n on"><span class="d"></span>🛡 SMS</div><div class="n"><span class="d"></span>📅 Planejamento · SERVIPLAN</div><div class="n"><span class="d"></span>⏱ Paradas de Manutenção</div><div class="n"><span class="d"></span>✓ Qualidade</div><div class="n"><span class="d"></span>🚚 Gestão de Frotas</div><div class="n"><span class="d"></span>⚙ Equipamentos de Campo</div><div class="n"><span class="d"></span>👥 Recursos Humanos</div></div>
+    <div class="lg-orb"><div class="n on"><span class="d"></span>🛡 SMS</div><div class="n"><span class="d"></span>📅 Planejamento · SERVIPLAN</div><div class="n"><span class="d"></span>📋 RDO</div><div class="n"><span class="d"></span>⏱ Paradas de Manutenção</div><div class="n"><span class="d"></span>✓ Qualidade</div><div class="n"><span class="d"></span>🚚 Gestão de Frotas</div><div class="n"><span class="d"></span>⚙ Equipamentos de Campo</div><div class="n"><span class="d"></span>👥 Recursos Humanos</div></div>
     <div class="lg-flow" aria-hidden="true"><span class="et e1"><i></i>CAMPO</span><span class="ln l1"></span><span class="et e2"><i></i>BASE DE DADOS</span><span class="ln l2"></span><span class="et e3"><i></i>GESTÃO EM TEMPO REAL</span></div>
                                         <form class="lg-card" onsubmit="event.preventDefault();entrar()">
       <h2>Acesse a plataforma</h2>
@@ -6028,6 +6028,7 @@ function renderVista(){ if(VISTA_ATUAL==='inicio') renderInicio(); else renderSM
 const MODULOS = [
   {id:'sms',   nome:'SMS', desc:'Auditorias, taxa de acidentes, CAF/SAF e treinamentos', icone:'🛡', cor:'#3a4a9e', ativo:true, qtd:'3 checklists disponíveis'},
   {id:'plan',  nome:'Planejamento', desc:'SERVIPLAN — programação e wrench-time das frentes', icone:'📅', cor:'#2f8f9e', ativo:false},
+  {id:'rdo',   nome:'RDO', desc:'Relatório Diário de Obra — efetivo, serviços executados e ocorrências do dia', icone:'📋', cor:'#44607d', ativo:false},
   {id:'parada',nome:'Paradas de Manutenção', desc:'Escopo, avanço físico e recursos da parada', icone:'⏱', cor:'#c8412f', ativo:false},
   {id:'qua',   nome:'Qualidade', desc:'Inspeções, não conformidades e ações corretivas', icone:'✓', cor:'#7cb342', ativo:false},
   {id:'frota', nome:'Gestão de Frotas', desc:'Veículos, manutenção, abastecimento e documentação', icone:'🚚', cor:'#6b5b95', ativo:false},
