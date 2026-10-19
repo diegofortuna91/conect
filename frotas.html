@@ -861,9 +861,10 @@ button,input,select{font-family:inherit;font-size:inherit}
 .fv{display:block}
 .fv svg{display:block;filter:drop-shadow(0 1px 3px rgba(28,35,51,.45))}
 .fv.sel svg{filter:drop-shadow(0 0 0 2px #fff) drop-shadow(0 2px 7px rgba(28,35,51,.6))}
-.fvp div{background:rgba(28,35,51,.88);color:#fff;border-radius:11px;padding:1px 7px;
-  font:800 10.5px/1.6 Lato,sans-serif;letter-spacing:.03em;white-space:nowrap;text-align:center;
-  box-shadow:0 1px 4px rgba(0,0,0,.35)}
+/* mesma etiqueta do mapa de áreas do SMS: fundo claro, texto escuro */
+.fvp div{background:rgba(255,255,255,.94);color:#1c2333;border-radius:13px;padding:2px 8px;
+  font:800 11px/1.5 Lato,sans-serif;letter-spacing:.02em;white-space:nowrap;text-align:center;
+  box-shadow:0 1px 4px rgba(0,0,0,.3)}
 #mapa.longe .fvp{display:none}
 .lbl-un div{background:rgba(255,255,255,.9);color:#1c2333;border-radius:11px;padding:1px 7px;
   font:800 10px/1.6 Lato,sans-serif;white-space:nowrap;text-align:center;
@@ -984,6 +985,8 @@ const EST = {
   semsinal: {cor:'#9aa3b8', nome:'sem comunicação'}
 };
 
+const NOME_TIPO = {picape:'picape', furgao:'furgão', van:'van', caminhao:'caminhão',
+                   onibus:'ônibus', moto:'moto', carro:'carro'};
 const SIM = /(?:^|[?&])sim=1(?:&|$)/.test(location.search);
 const $ = id => document.getElementById(id);
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c =>
@@ -1087,13 +1090,13 @@ function normalizar(lista){
       id: String(d.cobli_id || d.esn || v.license_plate),
       placa: (v.license_plate || '—').toUpperCase(),
       modelo: [v.brand, v.model].filter(Boolean).join(' ') || 'veículo sem cadastro',
-      ano: v.year || '',
+      marca: v.brand || '', ano: v.year || '',
       grupo: (v.groups && v.groups[0] && v.groups[0].name) || '',
       motorista: m.name || '', estado, vel: Math.round(vel),
       dir: Number(p.heading || 0), quando,
       pos: (isFinite(lat) && isFinite(lon) && (lat||lon)) ? [lat, lon] : null
     };
-  });
+  }).map(function(v){ v.tipo = tipoDoVeiculo(v); return v; });
 }
 
 async function ciclo(){
@@ -1148,8 +1151,10 @@ function quadro(){
     if(mk && v.exibida){
       mk.setLatLng(v.exibida);
       const et = mk._etiqueta; if(et) et.setLatLng(v.exibida);
-      const seta = mk._icon && mk._icon.querySelector('svg');
-      if(seta && v.estado === 'movendo') seta.style.transform = 'rotate(' + (v.dirExibida||0) + 'deg)';
+      // gira só o ponteiro da borda: a silhueta do veículo fica de pé
+      const ponteiro = mk._icon && mk._icon.querySelector('svg > g:first-child');
+      if(ponteiro && v.estado === 'movendo')
+        ponteiro.setAttribute('transform', 'rotate(' + (v.dirExibida||0) + ' 18 18)');
     }
   });
   if(SEGUIR && SELECIONADO){
@@ -1167,21 +1172,89 @@ function anguloEntre(a, b, k){
 
 /* ========================================================== desenho */
 
+/* ===================================================================
+   O MARCADOR
+
+   A cor diz a situação (andando, ocioso, desligado, sem sinal) e o
+   desenho diz o que é o veículo: picape, furgão, van, caminhão, moto.
+   Quem olha o mapa reconhece a frota pelo formato antes de ler a placa —
+   um caminhão parado na portaria é outra coisa que uma picape parada ali.
+
+   A direção vira um ponteiro na borda, fora do círculo, em vez de girar
+   o desenho inteiro: assim a silhueta continua de pé e legível.
+   =================================================================== */
+
+// Cada silhueta é montada com retângulos e rodas, não com traçado livre:
+// em dezessete pixels de largura, forma simples é o que se enxerga.
+const FORMAS = {
+  picape: '<rect x="1" y="6" width="18" height="3.1" rx="1"/>' +
+          '<rect x="3.2" y="3" width="7" height="3.4" rx="1.1"/>' +
+          '<rect x="10.8" y="4.5" width="7.6" height="1.8" rx="0.5"/>',
+  furgao: '<rect x="1" y="5.4" width="18" height="3.7" rx="1"/>' +
+          '<rect x="3" y="2.6" width="6.4" height="3.2" rx="1.1"/>' +
+          '<rect x="9.6" y="2.6" width="8.8" height="3.2" rx="0.9"/>',
+  van:    '<rect x="1" y="2.6" width="18" height="6.5" rx="1.8"/>',
+  caminhao: '<rect x="1" y="3.6" width="5.6" height="5.5" rx="1"/>' +
+            '<rect x="7.2" y="1.9" width="11.4" height="7.2" rx="0.8"/>',
+  onibus: '<rect x="1" y="2.2" width="18" height="6.9" rx="2"/>',
+  moto:   '<rect x="5" y="5.2" width="10" height="1.9" rx="0.9"/>' +
+          '<rect x="8.6" y="3" width="2.6" height="2.6" rx="0.8"/>',
+  carro:  '<rect x="1" y="6" width="18" height="3.1" rx="1.3"/>' +
+          '<rect x="4.8" y="3.1" width="9" height="3.3" rx="1.4"/>'
+};
+
+const RODAS = {
+  picape:   [[5.4,10],[14.6,10]],
+  furgao:   [[5.2,10],[15,10]],
+  van:      [[5.2,10],[15,10]],
+  caminhao: [[4.2,10],[13,10],[16.4,10]],
+  onibus:   [[4.6,10],[15.4,10]],
+  moto:     [[4.4,8.6],[15.6,8.6]],
+  carro:    [[5.5,10],[14.5,10]]
+};
+
+/* De que tipo é este veículo?
+   A Cobli devolve marca e modelo como texto livre, então a leitura é por
+   nome conhecido. O que não for reconhecido vira carro — errar para o
+   genérico é melhor do que inventar um caminhão que não existe.
+   "Cargo" sozinho não serve de pista: existe Ford Cargo, que é caminhão,
+   e Ducato Cargo, que é van. */
+const NOMES = [
+  ['caminhao', /(delivery|accelo|atego|axor|actros|constellation|worker|ford ?cargo|muck|munck|guincho|ba[uú]\b|truck|toco|carreta|cavalo|v[aá]cuo|vacuo|betoneira|basculante|caminh)/i],
+  ['onibus',   /(onibus|ônibus|marcopolo|volare|comil|busscar|neobus|\bbus\b)/i],
+  ['van',      /(ducato|sprinter|master|daily|transit|jumper|boxer|\bvan\b|trafic|vito|h100|jumpy|expert|scudo)/i],
+  ['furgao',   /(fiorino|doblo|dobl[oô]|kangoo|partner|berlingo|combo|courier|fur?g[aã]o)/i],
+  ['moto',     /(\bmoto\b|cg ?1[5-9]|\bbiz\b|\bpop ?1|titan|fan ?1|factor|\bybr\b|\bxre\b|bros|crosser|fazer)/i],
+  ['picape',   /(strada|toro|saveiro|montana|oroch|hilux|ranger|s-?10\b|l200|amarok|frontier|maverick|rampage|d-?max|gladiator|pick-?up|picape|cabine ?dupla)/i]
+];
+
+function tipoDoVeiculo(v){
+  const t = ((v.marca || '') + ' ' + (v.modelo || '')).toLowerCase();
+  for(const par of NOMES) if(par[1].test(t)) return par[0];
+  if(/pesad|caminh/i.test(v.grupo || '')) return 'caminhao';
+  return 'carro';
+}
+
 function icone(v, selecionado){
   const cor = EST[v.estado].cor;
-  const miolo =
-    v.estado === 'movendo'  ? '<path d="M14 5 L20 21 L14 17 L8 21 Z" fill="#fff"/>' :
-    v.estado === 'ocioso'   ? '<circle cx="14" cy="14" r="4.5" fill="#fff"/>' :
-    v.estado === 'parado'   ? '<rect x="10" y="10" width="8" height="8" rx="1.5" fill="#fff"/>' :
-      '<path d="M14 7.5 v7.5 M14 18.6 v.2" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/>';
-  const giro = v.estado === 'movendo' ? ' style="transform:rotate(' + (v.dirExibida||v.dir||0) + 'deg)"' : '';
+  const tipo = v.tipo || 'carro';
+  const rodas = (RODAS[tipo] || RODAS.carro)
+    .map(function(r){ return '<circle cx="' + r[0] + '" cy="' + r[1] + '" r="1.8"/>'; }).join('');
+  const silhueta = '<g transform="translate(8.5 12.3) scale(0.95)" fill="#fff">' +
+    (FORMAS[tipo] || FORMAS.carro) + rodas + '</g>';
+  // o ponteiro só aparece em quem está andando: é a direção, não enfeite
+  const ponteiro = v.estado === 'movendo'
+    ? '<g transform="rotate(' + (v.dirExibida != null ? v.dirExibida : (v.dir || 0)) + ' 18 18)">' +
+      '<path d="M18 1 L23.2 8.4 H12.8 Z" fill="' + cor + '" stroke="#fff" stroke-width="1.4" ' +
+      'stroke-linejoin="round"/></g>'
+    : '<g></g>';
   return L.divIcon({
     className: 'fv' + (selecionado ? ' sel' : ''),
-    iconSize: [28,28], iconAnchor: [14,14], popupAnchor: [0,-14],
-    html: '<svg width="28" height="28" viewBox="0 0 28 28"' + giro + '>' +
-      '<circle cx="14" cy="14" r="' + (selecionado ? 12 : 11.5) + '" fill="' + cor + '" stroke="#fff" ' +
-      'stroke-width="' + (selecionado ? 3 : 2.2) + '"' +
-      (v.estado === 'semsinal' ? ' stroke-dasharray="3 2.4"' : '') + '/>' + miolo + '</svg>'
+    iconSize: [36,36], iconAnchor: [18,18], popupAnchor: [0,-17],
+    html: '<svg width="36" height="36" viewBox="0 0 36 36">' + ponteiro +
+      '<circle cx="18" cy="18" r="' + (selecionado ? 13.1 : 12.5) + '" fill="' + cor + '" stroke="#fff" ' +
+      'stroke-width="' + (selecionado ? 3.2 : 2.4) + '"' +
+      (v.estado === 'semsinal' ? ' stroke-dasharray="3 2.4"' : '') + '/>' + silhueta + '</svg>'
   });
 }
 
@@ -1331,6 +1404,7 @@ function popup(v){
     linha('Situação', '<b style="color:' + e.cor + '">' + e.nome + '</b>') +
     linha('Velocidade', v.estado === 'semsinal' ? '—' : v.vel + ' km/h') +
     linha('Veículo', esc(v.modelo) + (v.ano ? ' · ' + esc(String(v.ano)) : '')) +
+    linha('Tipo', esc(NOME_TIPO[v.tipo] || 'carro')) +
     (v.motorista ? linha('Motorista', esc(v.motorista)) : '') +
     (v.grupo ? linha('Grupo', esc(v.grupo)) : '') +
     (unidadeDe(v.pos) ? linha('Unidade', esc(unidadeDe(v.pos))) : '') +
@@ -1447,6 +1521,11 @@ const SIM_PLACAS = ['PJB4A12','QRD7C88','NXT2F45','PKS9H30','QZM5J71','NBC3L09',
 const SIM_NOMES = ['Josenilton Santos','Marcelo Lima','Aldo Ferreira','Railson Costa','Cleber Nunes',
                    'Edvaldo Rocha','Tiago Andrade','Wagner Souza','',''];
 const SIM_GRUPOS = ['Apoio SMS','Manutenção','Transporte'];
+// variedade de propósito: a frota de um contrato tem de tudo
+const SIM_MARCAS = [['Fiat','Strada Freedom'], ['Fiat','Ducato Cargo'], ['Fiat','Fiorino'],
+                    ['Mercedes-Benz','Atego 1719'], ['Honda','CG 160 Titan'], ['Chevrolet','Onix'],
+                    ['Volkswagen','Saveiro'], ['Renault','Master'], ['Ford','Ranger'],
+                    ['Marcopolo','Volare W9']];
 
 function simIniciar(){
   SIM_FROTA = SIM_PLACAS.map((placa,i) => ({
@@ -1478,7 +1557,8 @@ function simPasso(){
   });
   return { devices: SIM_FROTA.map(c => ({
     cobli_id: 'sim-' + c.i, esn: 'SIM' + c.i,
-    vehicle: {license_plate: c.placa, brand: 'Fiat', model: ['Strada','Toro','Fiorino'][c.i%3],
+    vehicle: {license_plate: c.placa, brand: SIM_MARCAS[c.i % SIM_MARCAS.length][0],
+      model: SIM_MARCAS[c.i % SIM_MARCAS.length][1],
       year: 2024, groups: [{name: SIM_GRUPOS[c.i % 3]}]},
     driver: {name: SIM_NOMES[c.i] || ''},
     last_location: {latitude: String(c.lat), longitude: String(c.lon), speed: c.vel,
