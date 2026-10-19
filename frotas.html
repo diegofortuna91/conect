@@ -865,6 +865,10 @@ button,input,select{font-family:inherit;font-size:inherit}
   font:800 10.5px/1.6 Lato,sans-serif;letter-spacing:.03em;white-space:nowrap;text-align:center;
   box-shadow:0 1px 4px rgba(0,0,0,.35)}
 #mapa.longe .fvp{display:none}
+.lbl-un div{background:rgba(255,255,255,.9);color:#1c2333;border-radius:11px;padding:1px 7px;
+  font:800 10px/1.6 Lato,sans-serif;white-space:nowrap;text-align:center;
+  box-shadow:0 1px 3px rgba(0,0,0,.25)}
+#mapa.longe .lbl-un{display:none}
 .leaflet-popup-content{margin:12px 14px;font-size:13px}
 .pop h4{margin:0 0 8px;font-size:15px;letter-spacing:.02em}
 .pop .l{display:flex;justify-content:space-between;gap:14px;padding:3px 0;border-bottom:1px dashed var(--line)}
@@ -919,6 +923,7 @@ button,input,select{font-family:inherit;font-size:inherit}
           <button class="on" onclick="base('sat',this)">🛰 Satélite</button>
           <button onclick="base('mapa',this)">🗺 Mapa</button>
         </div>
+        <button class="bt on" id="btAreas" onclick="areasAlternar()">⬡ Unidades</button>
         <button class="bt" id="btTrilha" onclick="trilhaAlternar()">〰 Rastro</button>
         <button class="bt" onclick="enquadrar()">⤢ Enquadrar</button>
       </div>
@@ -942,6 +947,7 @@ button,input,select{font-family:inherit;font-size:inherit}
 
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
 <script>
 /* =====================================================================
    GESTÃO DE FROTAS — Service Conect+
@@ -983,7 +989,8 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c =>
   ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-let MAPA=null, CAMADAS={}, CAMADA_ATUAL='sat', GRUPO=null, GRUPO_TRILHA=null;
+let MAPA=null, CAMADAS={}, CAMADA_ATUAL='sat', GRUPO=null, GRUPO_TRILHA=null, GRUPO_AREAS=null;
+let AREAS=[], AREAS_ON=true;
 let VEICULOS=[], MARCAS={}, TRILHAS={}, SELECIONADO=null, SEGUIR=false, TRILHA_ON=false;
 let FILTRO='', RELOGIO=null, QUANDO=0, ERRO='', USUARIO=null, SIMULANDO=false;
 
@@ -996,6 +1003,7 @@ function iniciarMapa(){
   CAMADAS.mapa = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
     {maxZoom:19, attribution:'© OpenStreetMap'});
   CAMADAS[CAMADA_ATUAL].addTo(MAPA);
+  GRUPO_AREAS = L.layerGroup().addTo(MAPA);
   GRUPO_TRILHA = L.layerGroup().addTo(MAPA);
   GRUPO = L.layerGroup().addTo(MAPA);
   MAPA.setView(CENTRO, 14);
@@ -1207,6 +1215,116 @@ function pintar(){
     : (SIMULANDO ? 'simulação · ' : 'ao vivo · ') + idade(QUANDO);
 }
 
+
+/* ===================================================================
+   UNIDADES DA REFINARIA
+
+   As áreas já estão mapeadas pelo módulo de SMS — 95 polígonos e pontos
+   do parque industrial. Aqui elas só são LIDAS, da mesma coleção, para
+   dar contexto ao mapa: saber que o veículo está "no Pier 2" vale mais
+   do que saber que ele está em -12,7086 / -38,5625. Nada do SMS é
+   alterado por esta página.
+
+   Vem da nuvem quando há login; se o painel já foi aberto neste
+   navegador, o desenho aparece na hora, do que ficou guardado aqui.
+   =================================================================== */
+
+async function carregarAreas(){
+  AREAS = areasGuardadas();
+  desenharAreas();
+  try{
+    if(typeof firebase === 'undefined' || !firebase.firestore || !firebase.auth().currentUser) return;
+    const q = await firebase.firestore().collection('areas').get();
+    if(q.empty) return;
+    const l = [];
+    q.forEach(d => { const a = daNuvem(d.data()); if(a) l.push(a); });
+    if(l.length){ AREAS = l; desenharAreas(); }
+  }catch(e){ /* sem áreas, o mapa continua funcionando */ }
+}
+
+// O SMS guarda o contorno achatado (lat,lng,lat,lng…) para caber no documento.
+function daNuvem(o){
+  if(!o || !o.nome) return null;
+  const a = {nome:o.nome, ponto:o.ponto, centro:o.centro};
+  if(Array.isArray(o.poly) && o.poly.length >= 6){
+    a.poly = [];
+    for(let i = 0; i + 1 < o.poly.length; i += 2) a.poly.push([+o.poly[i], +o.poly[i+1]]);
+  }
+  if(!a.centro && a.poly) a.centro = centroide(a.poly);
+  return (a.poly || a.ponto) ? a : null;
+}
+
+function areasGuardadas(){
+  try{
+    const l = JSON.parse(localStorage.getItem('sms_areas') || '[]');
+    return Array.isArray(l) ? l.filter(a => a && a.nome && (a.poly || a.ponto)) : [];
+  }catch(e){ return []; }
+}
+
+function centroide(p){
+  const s = p.reduce((a,c)=>[a[0]+c[0], a[1]+c[1]], [0,0]);
+  return [s[0]/p.length, s[1]/p.length];
+}
+
+function desenharAreas(){
+  if(!GRUPO_AREAS) return;
+  GRUPO_AREAS.clearLayers();
+  if(!AREAS_ON) return;
+  AREAS.forEach(a => {
+    if(a.poly){
+      L.polygon(a.poly, {color:'#fff', weight:1.4, opacity:.75, fillColor:'#6b5b95',
+        fillOpacity:.1, interactive:false}).addTo(GRUPO_AREAS);
+    } else if(a.ponto){
+      L.circleMarker(a.ponto, {radius:4, color:'#fff', weight:1.4, opacity:.75,
+        fillColor:'#6b5b95', fillOpacity:.45, interactive:false}).addTo(GRUPO_AREAS);
+    }
+    const c = a.centro || a.ponto;
+    if(c) L.marker(c, {interactive:false, zIndexOffset:200,
+      icon: L.divIcon({className:'lbl-un', iconSize:[0,0],
+        html:'<div>' + esc(a.nome) + '</div>'})}).addTo(GRUPO_AREAS);
+  });
+}
+
+function areasAlternar(){
+  AREAS_ON = !AREAS_ON;
+  document.getElementById('btAreas').classList.toggle('on', AREAS_ON);
+  desenharAreas();
+}
+
+/* Em que unidade está este veículo?
+   Primeiro procura um contorno que contenha o ponto; se nenhum contiver,
+   aceita a área mais próxima dentro de 120 m, que cobre as unidades
+   marcadas só com um ponto. */
+function unidadeDe(pos){
+  if(!pos || !AREAS.length) return '';
+  for(const a of AREAS) if(a.poly && dentro(pos, a.poly)) return a.nome;
+  let melhor = '', d = 120;
+  AREAS.forEach(a => {
+    const c = a.ponto || a.centro;
+    if(!c) return;
+    const m = metros(pos, c);
+    if(m < d){ d = m; melhor = a.nome; }
+  });
+  return melhor;
+}
+
+function dentro(p, poly){
+  let d = false;
+  for(let i = 0, j = poly.length - 1; i < poly.length; j = i++){
+    const yi = poly[i][0], xi = poly[i][1], yj = poly[j][0], xj = poly[j][1];
+    if(((yi > p[0]) !== (yj > p[0])) && (p[1] < (xj - xi) * (p[0] - yi) / (yj - yi) + xi)) d = !d;
+  }
+  return d;
+}
+
+function metros(a, b){
+  const R = 6371000, r = Math.PI/180;
+  const dLat = (b[0]-a[0])*r, dLon = (b[1]-a[1])*r;
+  const x = Math.sin(dLat/2)**2 +
+    Math.cos(a[0]*r) * Math.cos(b[0]*r) * Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(x)));
+}
+
 function popup(v){
   const e = EST[v.estado];
   return '<div class="pop"><h4>' + esc(v.placa) + '</h4>' +
@@ -1215,6 +1333,7 @@ function popup(v){
     linha('Veículo', esc(v.modelo) + (v.ano ? ' · ' + esc(String(v.ano)) : '')) +
     (v.motorista ? linha('Motorista', esc(v.motorista)) : '') +
     (v.grupo ? linha('Grupo', esc(v.grupo)) : '') +
+    (unidadeDe(v.pos) ? linha('Unidade', esc(unidadeDe(v.pos))) : '') +
     linha('Última posição', idade(v.quando)) +
     (v.pos ? linha('Coordenada', '<span style="font-size:11px">' + v.pos[0].toFixed(5) + ', ' + v.pos[1].toFixed(5) + '</span>') : '') +
     '</div>';
@@ -1382,6 +1501,7 @@ function porta(ic, titulo, texto, rotulo, destino){
 function comecar(){
   iniciarMapa();
   requestAnimationFrame(quadro);
+  carregarAreas();
   if(!FROTA_PROXY){
     SIMULANDO = true;
     faixa('<b>Veículos simulados.</b> A integração com a Cobli ainda não foi ligada — ' +
