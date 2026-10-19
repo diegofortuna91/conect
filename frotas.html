@@ -804,8 +804,9 @@ button,input,select{font-family:inherit;font-size:inherit}
 .faixa.erro{background:#fbecea;color:#8c2d20;border-bottom-color:#f1cdc7}
 
 /* ----------------------------------------------------------- corpo */
-.corpo{display:flex;height:calc(100% - var(--topo));position:relative}
-.corpo.com-faixa{height:calc(100% - var(--topo) - 38px)}
+.corpo{display:flex;flex:1;min-height:0;width:100%;position:relative}
+body{display:flex;flex-direction:column}
+.area{display:flex;flex-direction:column}
 
 .lado{width:var(--lado);background:#fff;border-right:1px solid var(--line);display:flex;
   flex-direction:column;z-index:700}
@@ -866,10 +867,10 @@ button,input,select{font-family:inherit;font-size:inherit}
   font:800 11px/1.5 Lato,sans-serif;letter-spacing:.02em;white-space:nowrap;text-align:center;
   box-shadow:0 1px 4px rgba(0,0,0,.3)}
 #mapa.longe .fvp{display:none}
-.lbl-un div{background:rgba(255,255,255,.9);color:#1c2333;border-radius:11px;padding:1px 7px;
-  font:800 10px/1.6 Lato,sans-serif;white-space:nowrap;text-align:center;
-  box-shadow:0 1px 3px rgba(0,0,0,.25)}
-#mapa.longe .lbl-un{display:none}
+.lbl-un div{background:rgba(255,255,255,.55);color:#3d4663;border-radius:9px;padding:0 6px;
+  font:700 9.5px/1.7 Lato,sans-serif;white-space:nowrap;text-align:center;letter-spacing:.02em}
+/* os nomes das unidades são pano de fundo: só aparecem de perto, e discretos */
+#mapa.longe .lbl-un,#mapa.medio .lbl-un{display:none}
 .leaflet-popup-content{margin:12px 14px;font-size:13px}
 .pop h4{margin:0 0 8px;font-size:15px;letter-spacing:.02em}
 .pop .l{display:flex;justify-content:space-between;gap:14px;padding:3px 0;border-bottom:1px dashed var(--line)}
@@ -887,6 +888,68 @@ button,input,select{font-family:inherit;font-size:inherit}
 .porta p{margin:0 0 20px;color:#aab3c6;font-size:13.5px;line-height:1.6}
 .porta a,.porta button{display:inline-block;background:var(--navy3);color:#fff;text-decoration:none;
   border:0;border-radius:9px;padding:11px 20px;font-size:13.5px;font-weight:700;cursor:pointer}
+
+
+/* ------------------------------------------------------- abas e páginas */
+.abas{display:flex;gap:2px;background:#fff;border-bottom:1px solid var(--line);padding:0 10px;
+  overflow-x:auto;position:relative;z-index:650}
+.abas button{border:0;background:none;padding:11px 15px;font-size:13px;font-weight:700;color:var(--slate);
+  cursor:pointer;border-bottom:2.5px solid transparent;white-space:nowrap}
+.abas button:hover{color:var(--ink)}
+.abas button.on{color:var(--navy);border-bottom-color:var(--navy)}
+.area{flex:1;min-height:0;position:relative}
+.pag{position:absolute;inset:0;display:none;overflow:auto}
+.pag.on{display:block}
+.pag.mapa.on{display:flex}
+.rolo{padding:16px 18px 30px;max-width:1500px;margin:0 auto}
+
+/* ------------------------------------------------------------- cartões */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(176px,1fr));gap:11px;margin-bottom:16px}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:var(--r);padding:13px 14px;box-shadow:var(--sh)}
+.kpi .r{font-size:10.5px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--slate2)}
+.kpi .v{font-size:25px;font-weight:800;line-height:1.25;margin-top:3px;letter-spacing:-.01em}
+.kpi .s{font-size:11.5px;color:var(--slate);line-height:1.45}
+.kpi.alerta{border-color:#eab9b0;background:#fdf6f4}
+.kpi.alerta .v{color:var(--red)}
+.kpi.bom .v{color:var(--green)}
+
+.secao{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--slate2);
+  margin:20px 0 9px;display:flex;align-items:center;gap:8px}
+.secao:after{content:'';flex:1;height:1px;background:var(--line)}
+.grade{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:13px}
+.caixa{background:#fff;border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh);overflow:hidden}
+.caixa h3{margin:0;padding:12px 15px 0;font-size:14px}
+.caixa .sub{padding:1px 15px 0;font-size:11.5px;color:var(--slate)}
+.caixa .corpo2{padding:12px 15px 15px}
+
+/* -------------------------------------------------------------- barras */
+.barra-l{display:flex;align-items:center;gap:9px;margin-bottom:7px;font-size:12.5px}
+.barra-l .nm{width:40%;min-width:120px;color:var(--ink);font-weight:600;white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis}
+.barra-l .tr{flex:1;background:var(--line2);border-radius:5px;height:14px;overflow:hidden}
+.barra-l .tr i{display:block;height:100%;border-radius:5px}
+.barra-l .vl{width:70px;text-align:right;font-weight:800;color:var(--slate);white-space:nowrap}
+
+/* -------------------------------------------------------------- tabela */
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--slate2);
+  padding:7px 10px;border-bottom:1px solid var(--line);font-weight:800;position:sticky;top:0;background:#fff}
+.tbl td{padding:8px 10px;border-bottom:1px solid var(--line2)}
+.tbl tr:last-child td{border-bottom:0}
+.tbl tr.clic{cursor:pointer}
+.tbl tr.clic:hover{background:var(--line2)}
+.tbl .pl{font-weight:800;letter-spacing:.02em}
+.rolavel{max-height:430px;overflow:auto}
+.marca{display:inline-flex;align-items:center;gap:6px;padding:2px 9px;border-radius:11px;font-size:11px;
+  font-weight:800;color:#fff}
+.periodo{display:flex;gap:4px;background:var(--line2);border-radius:8px;padding:3px;margin-left:auto}
+.periodo button{border:0;background:none;padding:5px 11px;border-radius:6px;font-size:12px;font-weight:700;
+  color:var(--slate);cursor:pointer}
+.periodo button.on{background:#fff;color:var(--navy);box-shadow:0 1px 3px rgba(28,35,51,.12)}
+.cab{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:4px}
+.cab h2{margin:0;font-size:18px}
+.cab p{margin:0;font-size:12.5px;color:var(--slate)}
+.carregando{padding:30px;text-align:center;color:var(--slate2);font-size:12.5px}
 
 @media(max-width:860px){
   :root{--lado:100%}
@@ -909,6 +972,48 @@ button,input,select{font-family:inherit;font-size:inherit}
 
 <div class="faixa" id="faixa"></div>
 
+<nav class="abas" id="abas">
+  <button class="on" onclick="irPara('geral',this)">Visão geral</button>
+  <button onclick="irPara('mapa',this)">Mapa ao vivo</button>
+  <button onclick="irPara('desvios',this)">Desvios</button>
+  <button onclick="irPara('motoristas',this)">Motoristas</button>
+  <button onclick="irPara('custos',this)">Custos e uso</button>
+</nav>
+
+<div class="area" id="area">
+
+<section class="pag on" id="pg-geral"><div class="rolo">
+  <div class="cab"><div><h2>Visão geral da frota</h2>
+    <p id="geralSub">carregando…</p></div>
+    <div class="periodo" id="periodo"></div></div>
+  <div class="kpis" id="kpis"></div>
+  <div class="grade" id="geralGrade"></div>
+</div></section>
+
+<section class="pag" id="pg-desvios"><div class="rolo">
+  <div class="cab"><div><h2>Desvios de condução</h2>
+    <p id="desviosSub">carregando…</p></div></div>
+  <div class="grade" id="desviosGrade"></div>
+  <div class="secao">Ocorrências</div>
+  <div class="caixa"><div class="rolavel" id="desviosTab"></div></div>
+</div></section>
+
+<section class="pag" id="pg-motoristas"><div class="rolo">
+  <div class="cab"><div><h2>Motoristas</h2>
+    <p id="motSub">carregando…</p></div></div>
+  <div class="caixa"><div class="rolavel" id="motTab"></div></div>
+</div></section>
+
+<section class="pag" id="pg-custos"><div class="rolo">
+  <div class="cab"><div><h2>Uso e custos da frota</h2>
+    <p id="custoSub">carregando…</p></div></div>
+  <div class="kpis" id="custoKpis"></div>
+  <div class="grade" id="custoGrade"></div>
+  <div class="secao">Por veículo</div>
+  <div class="caixa"><div class="rolavel" id="custoTab"></div></div>
+</div></section>
+
+<section class="pag mapa" id="pg-mapa">
 <div class="corpo" id="corpo">
   <aside class="lado">
     <div class="busca"><input id="busca" placeholder="Buscar placa, motorista ou grupo…" oninput="renderLista()"></div>
@@ -937,6 +1042,9 @@ button,input,select{font-family:inherit;font-size:inherit}
       <div class="l"><i style="background:#9aa3b8"></i> sem comunicação</div>
     </div>
   </div>
+</div>
+</section>
+
 </div>
 
 <div class="porta" id="porta"><div class="cx">
@@ -1010,8 +1118,11 @@ function iniciarMapa(){
   GRUPO_TRILHA = L.layerGroup().addTo(MAPA);
   GRUPO = L.layerGroup().addTo(MAPA);
   MAPA.setView(CENTRO, 14);
-  const perto = () => $('mapa').classList.toggle('longe', MAPA.getZoom() < 13);
-  MAPA.on('zoomend', perto); perto();
+  const perto = () => {
+    $('mapa').classList.toggle('longe', MAPA.getZoom() < 13);
+    $('mapa').classList.toggle('medio', MAPA.getZoom() < 16);
+  };
+  MAPA.on('zoomend', () => { perto(); redesenharIcones(); }); perto();
   // arrastar o mapa à mão desliga o "seguir": quem manda é a pessoa
   MAPA.on('dragstart', ()=>{ if(SEGUIR){ SEGUIR=false; } });
 }
@@ -1184,34 +1295,45 @@ function anguloEntre(a, b, k){
    o desenho inteiro: assim a silhueta continua de pé e legível.
    =================================================================== */
 
-// Cada silhueta é montada com retângulos e rodas, não com traçado livre:
-// em dezessete pixels de largura, forma simples é o que se enxerga.
+// As silhuetas são desenhadas de lado, no mesmo estilo e na mesma altura
+// visual, para que a leitura seja do formato do veículo — e a cor continue
+// dizendo apenas a situação. Todas partilham o viewBox 60x28, com o chão
+// em y=25,6, de modo que o conjunto fica alinhado.
 const FORMAS = {
-  picape: '<rect x="1" y="6" width="18" height="3.1" rx="1"/>' +
-          '<rect x="3.2" y="3" width="7" height="3.4" rx="1.1"/>' +
-          '<rect x="10.8" y="4.5" width="7.6" height="1.8" rx="0.5"/>',
-  furgao: '<rect x="1" y="5.4" width="18" height="3.7" rx="1"/>' +
-          '<rect x="3" y="2.6" width="6.4" height="3.2" rx="1.1"/>' +
-          '<rect x="9.6" y="2.6" width="8.8" height="3.2" rx="0.9"/>',
-  van:    '<rect x="1" y="2.6" width="18" height="6.5" rx="1.8"/>',
-  caminhao: '<rect x="1" y="3.6" width="5.6" height="5.5" rx="1"/>' +
-            '<rect x="7.2" y="1.9" width="11.4" height="7.2" rx="0.8"/>',
-  onibus: '<rect x="1" y="2.2" width="18" height="6.9" rx="2"/>',
-  moto:   '<rect x="5" y="5.2" width="10" height="1.9" rx="0.9"/>' +
-          '<rect x="8.6" y="3" width="2.6" height="2.6" rx="0.8"/>',
-  carro:  '<rect x="1" y="6" width="18" height="3.1" rx="1.3"/>' +
-          '<rect x="4.8" y="3.1" width="9" height="3.3" rx="1.4"/>'
+  van: `<path d="M3.5 25.6 Q2.5 25.6 2.5 24.6 L2.5 7 Q2.5 5 4.5 5 L33 5 Q36.5 5 39 7.6
+        L48.5 17.4 Q53 18.2 55.4 20 Q57 21.3 57 23 L57 24.6 Q57 25.6 56 25.6 L52.6 25.6
+        A5.2 5.2 0 0 0 42.2 25.6 L21.4 25.6 A5.2 5.2 0 0 0 11 25.6 Z"/>
+        <path d="M6 8 L22.5 8 L22.5 14.8 L6 14.8 Z" class="vazio"/>
+        <path d="M34.4 8 L35.6 8 Q36.9 8 37.7 8.9 L44.8 16.4 L34.4 16.4 Z" class="vazio"/>`,
+  picape: `<path d="M3.5 25.6 Q2.5 25.6 2.5 24.6 L2.5 18.5 Q2.5 17.6 3.5 17.6 L22.5 17.6 L22.5 10.4
+        Q22.5 8.6 24.3 8.6 L36 8.6 Q38.4 8.6 39.9 10.5 L45.6 17.6 L53.5 18.9 Q57 19.5 57 22.4
+        L57 24.6 Q57 25.6 56 25.6 L52.6 25.6 A5.2 5.2 0 0 0 42.2 25.6 L21.4 25.6 A5.2 5.2 0 0 0 11 25.6 Z"/>
+        <path d="M25.6 11.4 L34.8 11.4 Q35.8 11.4 36.5 12.2 L40.6 17.2 L25.6 17.2 Z" class="vazio"/>`,
+  carro: `<path d="M3.2 25.6 Q2 25.6 2 24.4 L2 19.8 Q2 18.4 3.4 18 L10.5 16.2 L17.4 10.2
+        Q19.2 8.6 21.6 8.6 L36.4 8.6 Q39 8.6 40.8 10.3 L46.6 16.2 L54 17.6 Q57 18.2 57 21.2
+        L57 24.4 Q57 25.6 55.8 25.6 L52.6 25.6 A5.2 5.2 0 0 0 42.2 25.6 L21.4 25.6 A5.2 5.2 0 0 0 11 25.6 Z"/>
+        <path d="M20.4 11.3 L28.6 11.3 L28.6 16.2 L14.8 16.2 Z" class="vazio"/>
+        <path d="M31 11.3 L36 11.3 Q37.4 11.3 38.3 12.2 L41.8 16.2 L31 16.2 Z" class="vazio"/>`,
+  caminhao: `<path d="M5 25.6 Q4 25.6 4 24.6 L4 7.4 Q4 6.4 5 6.4 L33 6.4 Q34 6.4 34 7.4
+        L34 11.4 L38.4 11.4 Q40.6 11.4 42 13.2 L46.8 19.4 L53.6 20.4 Q57 21 57 24 L57 24.6
+        Q57 25.6 56 25.6 L52.6 25.6 A5.2 5.2 0 0 0 42.2 25.6 L20 25.6 A5.2 5.2 0 0 0 9.6 25.6 Z"/>
+        <path d="M37.2 13.8 L39.2 13.8 Q40.2 13.8 40.8 14.6 L44 19 L37.2 19 Z" class="vazio"/>`,
+  onibus: `<path d="M6 25.6 Q4.6 25.6 4.6 24.2 L4.6 8.6 Q4.6 6.4 7 6.4 L51 6.4 Q53.4 6.4 53.4 8.6
+        L53.4 24.2 Q56 25.6 54.6 25.6 L51.2 25.6 A5.2 5.2 0 0 0 38.6 25.6 L19.4 25.6 A5.2 5.2 0 0 0 9 25.6 Z"/>
+        <path d="M7.6 9.8 L24 9.8 L24 15.6 L7.6 15.6 Z" class="vazio"/>
+        <path d="M26.6 9.8 L43 9.8 L43 15.6 L26.6 15.6 Z" class="vazio"/>`,
+  moto: `<path d="M20 12 L26 12 L30.5 17 L38 17 L41 12.4 L36.6 12.4 L36.6 9.8 L46.5 9.8 L46.5 12.4
+        L44.2 12.4 L40.4 18.4 Q44 20.2 44 23.6 L41 23.6 Q41 20 37.4 20 L30 20 L27.5 23.2 L24 23.2
+        L22 20.6 Q18.6 20.4 17 23.6 L14 23.6 Q16 18.4 21.6 17.6 L25.4 14.6 L20 14.6 Z"/>`
+};
+const RODAS = {
+  van:[[16.2,25.6],[47.4,25.6]], picape:[[16.2,25.6],[47.4,25.6]], carro:[[16.2,25.6],[47.4,25.6]],
+  caminhao:[[14.8,25.6],[47.4,25.6]], onibus:[[14.2,25.6],[43.6,25.6]], moto:[[13.6,22.6],[45.6,22.6]]
 };
 
-const RODAS = {
-  picape:   [[5.4,10],[14.6,10]],
-  furgao:   [[5.2,10],[15,10]],
-  van:      [[5.2,10],[15,10]],
-  caminhao: [[4.2,10],[13,10],[16.4,10]],
-  onibus:   [[4.6,10],[15.4,10]],
-  moto:     [[4.4,8.6],[15.6,8.6]],
-  carro:    [[5.5,10],[14.5,10]]
-};
+// Fiorino e Doblô lidos como furgão desenham a mesma van: em trinta pixels
+// a diferença entre um furgão pequeno e uma van não existe.
+FORMAS.furgao = FORMAS.van; RODAS.furgao = RODAS.van;
 
 /* De que tipo é este veículo?
    A Cobli devolve marca e modelo como texto livre, então a leitura é por
@@ -1235,27 +1357,46 @@ function tipoDoVeiculo(v){
   return 'carro';
 }
 
+/* O tamanho acompanha o zoom: de longe o marcador atrapalharia a leitura
+   do mapa, e de perto precisa ter o porte de um veículo na pista. */
+function tamIcone(){
+  const z = MAPA ? MAPA.getZoom() : 15;
+  if(z <= 12) return 26;
+  if(z <= 14) return 32;
+  if(z <= 16) return 38;
+  return 46;
+}
+
 function icone(v, selecionado){
   const cor = EST[v.estado].cor;
-  const tipo = v.tipo || 'carro';
-  const rodas = (RODAS[tipo] || RODAS.carro)
-    .map(function(r){ return '<circle cx="' + r[0] + '" cy="' + r[1] + '" r="1.8"/>'; }).join('');
-  const silhueta = '<g transform="translate(8.5 12.3) scale(0.95)" fill="#fff">' +
-    (FORMAS[tipo] || FORMAS.carro) + rodas + '</g>';
-  // o ponteiro só aparece em quem está andando: é a direção, não enfeite
+  const tipo = FORMAS[v.tipo] ? v.tipo : 'carro';
+  const px = tamIcone() * (selecionado ? 1.12 : 1);
+  const k = px / 36;                      // tudo é desenhado em 36 e escalado
+  const rodas = RODAS[tipo].map(function(r){
+    return '<circle cx="' + r[0] + '" cy="' + r[1] + '" r="4.6" fill="#fff"/>' +
+           '<circle cx="' + r[0] + '" cy="' + r[1] + '" r="1.9" fill="' + cor + '"/>';
+  }).join('');
+  const silhueta = '<g transform="translate(18 18) scale(0.38) translate(-30 -15)" fill="#fff">' +
+    FORMAS[tipo].replace(/class="vazio"/g, 'fill="' + cor + '"') + rodas + '</g>';
   const ponteiro = v.estado === 'movendo'
     ? '<g transform="rotate(' + (v.dirExibida != null ? v.dirExibida : (v.dir || 0)) + ' 18 18)">' +
-      '<path d="M18 1 L23.2 8.4 H12.8 Z" fill="' + cor + '" stroke="#fff" stroke-width="1.4" ' +
+      '<path d="M18 0.6 L23.4 8.6 H12.6 Z" fill="' + cor + '" stroke="#fff" stroke-width="1.5" ' +
       'stroke-linejoin="round"/></g>'
     : '<g></g>';
   return L.divIcon({
     className: 'fv' + (selecionado ? ' sel' : ''),
-    iconSize: [36,36], iconAnchor: [18,18], popupAnchor: [0,-17],
-    html: '<svg width="36" height="36" viewBox="0 0 36 36">' + ponteiro +
-      '<circle cx="18" cy="18" r="' + (selecionado ? 13.1 : 12.5) + '" fill="' + cor + '" stroke="#fff" ' +
-      'stroke-width="' + (selecionado ? 3.2 : 2.4) + '"' +
+    iconSize: [px, px], iconAnchor: [px/2, px/2], popupAnchor: [0, -px/2 + 1],
+    html: '<svg width="' + px + '" height="' + px + '" viewBox="0 0 36 36">' + ponteiro +
+      '<circle cx="18" cy="18" r="' + (selecionado ? 13 : 12.5) + '" fill="' + cor + '" stroke="#fff" ' +
+      'stroke-width="' + (selecionado ? 3 : 2.4) + '"' +
       (v.estado === 'semsinal' ? ' stroke-dasharray="3 2.4"' : '') + '/>' + silhueta + '</svg>'
   });
+}
+
+// Trocar o zoom muda o tamanho dos marcadores; isso obriga a refazê-los.
+function redesenharIcones(){
+  Object.keys(MARCAS).forEach(k => { MARCAS[k]._estado = null; });
+  pintar();
 }
 
 function pintar(){
@@ -1345,11 +1486,11 @@ function desenharAreas(){
   if(!AREAS_ON) return;
   AREAS.forEach(a => {
     if(a.poly){
-      L.polygon(a.poly, {color:'#fff', weight:1.4, opacity:.75, fillColor:'#6b5b95',
-        fillOpacity:.1, interactive:false}).addTo(GRUPO_AREAS);
+      L.polygon(a.poly, {color:'#fff', weight:1, opacity:.4, fillColor:'#6b5b95',
+        fillOpacity:.05, interactive:false}).addTo(GRUPO_AREAS);
     } else if(a.ponto){
-      L.circleMarker(a.ponto, {radius:4, color:'#fff', weight:1.4, opacity:.75,
-        fillColor:'#6b5b95', fillOpacity:.45, interactive:false}).addTo(GRUPO_AREAS);
+      L.circleMarker(a.ponto, {radius:2.6, color:'#fff', weight:1, opacity:.45,
+        fillColor:'#6b5b95', fillOpacity:.3, interactive:false}).addTo(GRUPO_AREAS);
     }
     const c = a.centro || a.ponto;
     if(c) L.marker(c, {interactive:false, zIndexOffset:200,
@@ -1566,6 +1707,369 @@ function simPasso(){
   }))};
 }
 
+
+/* ===================================================================
+   PAINEL DE GESTÃO
+
+   O mapa mostra onde a frota está agora. Estas telas mostram como ela
+   está indo: quanto rodou, quanto desperdiçou parada com o motor ligado,
+   que desvios de condução aconteceram e com quem.
+
+   Tudo vem do mesmo proxy. Cada consulta é independente: se uma falhar,
+   as outras continuam e o cartão correspondente diz o que faltou, em vez
+   de a tela inteira ficar em branco.
+   =================================================================== */
+
+const DIAS = [7, 30, 90];
+let PERIODO = 30;
+const G = {};                 // o que foi carregado de cada consulta
+
+const DESVIO_NOME = {
+  DISTRACTED_DRIVING: 'distração ao volante',
+  PHONE_USAGE: 'uso de celular',
+  YAWN: 'bocejo · sonolência',
+  EYES_CLOSED: 'olhos fechados',
+  SMOKING: 'cigarro ao volante',
+  TAILGATING: 'seguir muito perto',
+  HARD_BREAK: 'frenagem brusca',
+  FAST_ACCELERATION: 'aceleração brusca',
+  SPEEDY_TURN: 'curva acentuada',
+  FRONT_COLLISION_WARNING: 'risco de colisão frontal',
+  SOS: 'acionamento de SOS',
+  OVER_SPEED: 'excesso de velocidade'
+};
+// os que têm a ver com o motorista olhar para fora do carro
+const DESVIO_GRAVE = ['DISTRACTED_DRIVING','PHONE_USAGE','EYES_CLOSED','SOS','FRONT_COLLISION_WARNING'];
+const DESVIO_COR = t => DESVIO_GRAVE.includes(t) ? '#c8412f'
+  : (t === 'YAWN' || t === 'SMOKING') ? '#e8963c' : '#3a4a9e';
+
+const dia = d => new Date(d).toISOString().slice(0,10);
+const num = (n, c) => (n == null || isNaN(n)) ? '—'
+  : Number(n).toLocaleString('pt-BR', {minimumFractionDigits: c||0, maximumFractionDigits: c||0});
+const reais = n => (n == null || isNaN(n)) ? '—'
+  : 'R$ ' + Number(n).toLocaleString('pt-BR', {minimumFractionDigits:2, maximumFractionDigits:2});
+const horas = min => min == null ? '—'
+  : (min < 60 ? Math.round(min) + ' min' : num(min/60, 1) + ' h');
+
+function irPara(aba, bt){
+  document.querySelectorAll('.pag').forEach(p => p.classList.toggle('on', p.id === 'pg-' + aba));
+  if(bt) [...bt.parentNode.children].forEach(b => b.classList.toggle('on', b === bt));
+  // O mapa nasce escondido atrás da visão geral, e um contêiner de tamanho
+  // zero faz o Leaflet calcular enquadramento errado. Ao aparecer, ele se
+  // remede; na primeira vez, também se enquadra na frota.
+  if(aba === 'mapa' && MAPA) setTimeout(() => {
+    MAPA.invalidateSize();
+    if(!MAPA._enquadrado){ MAPA._enquadrado = true; enquadrar(); }
+  }, 60);
+}
+
+function periodoBotoes(){
+  const el = $('periodo'); if(!el) return;
+  el.innerHTML = DIAS.map(d =>
+    '<button class="' + (d === PERIODO ? 'on' : '') + '" onclick="mudarPeriodo(' + d + ')">' +
+    d + ' dias</button>').join('');
+}
+
+function mudarPeriodo(d){ PERIODO = d; periodoBotoes(); carregarGestao(); }
+
+/* --------------------------------------------------------- as consultas */
+
+async function carregarGestao(){
+  const ini = dia(Date.now() - (PERIODO - 1) * 864e5), fim = dia(Date.now());
+  ['geralSub','desviosSub','motSub','custoSub'].forEach(id => {
+    const e = $(id); if(e) e.textContent = 'consultando os últimos ' + PERIODO + ' dias…';
+  });
+
+  const pedir = (chave, rota, par) => buscar(rota, par)
+    .then(j => { G[chave] = j; G[chave + '_erro'] = ''; })
+    .catch(e => { G[chave] = null; G[chave + '_erro'] = e.message; });
+
+  await Promise.all([
+    pedir('desvios', 'desvios', {inicio: ini, fim: fim, limite: 500}),
+    pedir('km', 'km', {inicio: ini, fim: fim}),
+    pedir('ocioso', 'ocioso', {inicio: ini, fim: fim}),
+    pedir('ranking', 'ranking', {inicio: ini, fim: fim}),
+    pedir('multas', 'multas', {inicio: ini, fim: fim}),
+    pedir('manutencao', 'manutencao')
+  ]);
+
+  renderGeral(); renderDesvios(); renderMotoristas(); renderCustos();
+}
+
+/* ------------------------------------------------------------ visão geral */
+
+function listaDesvios(){ return (G.desvios && G.desvios.data) ? G.desvios.data : []; }
+function listaKm(){ return (G.km && G.km.data) ? G.km.data : []; }
+function listaOcioso(){ return Array.isArray(G.ocioso) ? G.ocioso : []; }
+function listaMultas(){ return (G.multas && G.multas.content) ? G.multas.content : []; }
+
+function somaOcioso(c){ return listaOcioso().reduce((a,o) => a + (o[c] || 0), 0); }
+
+function renderGeral(){
+  const d = listaDesvios(), km = listaKm(), mu = listaMultas();
+  const totalKm = km.reduce((a,v) => a + (v.distance_driven_in_km || 0), 0);
+  const graves = d.filter(x => DESVIO_GRAVE.includes(x.event_type)).length;
+  const comSinal = VEICULOS.filter(v => v.estado !== 'semsinal').length;
+  const nota = (G.ranking && G.ranking.data) ? G.ranking.data.average_fleet_score : null;
+  const valorMultas = mu.reduce((a,m) => a + (m.value_in_cents || 0), 0) / 100;
+
+  $('geralSub').textContent = 'últimos ' + PERIODO + ' dias · ' + VEICULOS.length +
+    ' veículo(s) no rastreamento';
+
+  const cartoes = [
+    {r:'Frota rastreada', v: VEICULOS.length, s: comSinal + ' com comunicação'},
+    {r:'Rodados no período', v: num(totalKm) + ' km',
+      s: km.length ? num(totalKm / Math.max(1, km.length)) + ' km por veículo' : 'sem dados'},
+    {r:'Desvios de condução', v: d.length,
+      s: graves ? graves + ' de atenção ao volante' : 'nenhum grave', cls: graves ? 'alerta' : ''},
+    {r:'Motor ocioso', v: horas(somaOcioso('total_idle_in_minutes')),
+      s: reais(somaOcioso('fuel_costs')) + ' em combustível'},
+    {r:'Multas', v: mu.length, s: mu.length ? reais(valorMultas) : 'nenhuma no período',
+      cls: mu.length ? 'alerta' : 'bom'},
+    {r:'Nota de condução', v: nota != null ? nota : '—',
+      s: (G.ranking && G.ranking.data) ? G.ranking.data.count + ' motorista(s)' : 'sem dados',
+      cls: nota != null && nota >= 70 ? 'bom' : (nota != null && nota < 40 ? 'alerta' : '')}
+  ];
+  $('kpis').innerHTML = cartoes.map(c =>
+    '<div class="kpi ' + (c.cls || '') + '"><div class="r">' + c.r + '</div>' +
+    '<div class="v">' + c.v + '</div><div class="s">' + c.s + '</div></div>').join('');
+
+  const porTipo = {}; d.forEach(x => porTipo[x.event_type] = (porTipo[x.event_type] || 0) + 1);
+  const porVeic = {};
+  d.forEach(x => { const p = (x.vehicle && x.vehicle.license_plate) || '—';
+    porVeic[p] = (porVeic[p] || 0) + 1; });
+
+  $('geralGrade').innerHTML =
+    caixa('Desvios por tipo', 'o que mais aconteceu no período',
+      barras(porTipo, t => DESVIO_NOME[t] || t.toLowerCase().replace(/_/g,' '), DESVIO_COR)) +
+    caixa('Desvios por veículo', 'onde a condução precisa de atenção',
+      barras(porVeic, p => p, () => '#3a4a9e')) +
+    caixa('Quilometragem', 'distância rodada por veículo no período',
+      barras(km.reduce((a,v) => { a[v.license_plate || '—'] = v.distance_driven_in_km; return a; }, {}),
+        p => p, () => '#2f8f9e', v => num(v,1) + ' km')) +
+    caixa('Motor ocioso', 'tempo parado com o motor ligado, e o que custou',
+      barras(listaOcioso().reduce((a,o) => {
+          a[(o.vehicle && o.vehicle.license_plate) || '—'] = o.total_idle_in_minutes || 0; return a; }, {}),
+        p => p, () => '#e8963c', v => horas(v)));
+}
+
+function caixa(titulo, sub, dentro){
+  return '<div class="caixa"><h3>' + titulo + '</h3><div class="sub">' + sub + '</div>' +
+    '<div class="corpo2">' + dentro + '</div></div>';
+}
+
+function barras(mapa, rotulo, cor, formato){
+  const itens = Object.entries(mapa).filter(e => e[1]).sort((a,b) => b[1] - a[1]).slice(0, 10);
+  if(!itens.length) return '<div class="carregando">Sem dados no período.</div>';
+  const max = Math.max(...itens.map(i => i[1]));
+  return itens.map(([k, v]) =>
+    '<div class="barra-l"><span class="nm" title="' + esc(rotulo(k)) + '">' + esc(rotulo(k)) + '</span>' +
+    '<span class="tr"><i style="width:' + Math.max(3, (v/max)*100) + '%;background:' + cor(k) + '"></i></span>' +
+    '<span class="vl">' + (formato ? formato(v) : num(v)) + '</span></div>').join('');
+}
+
+/* ---------------------------------------------------------------- desvios */
+
+function renderDesvios(){
+  const d = listaDesvios();
+  if(G.desvios_erro){ $('desviosSub').textContent = '⚠ ' + G.desvios_erro; }
+  else $('desviosSub').textContent = d.length + ' ocorrência(s) nos últimos ' + PERIODO + ' dias';
+
+  const porTipo = {}; d.forEach(x => porTipo[x.event_type] = (porTipo[x.event_type] || 0) + 1);
+  const porDia = {};
+  d.forEach(x => { const k = (x.event_time || '').slice(0,10); if(k) porDia[k] = (porDia[k] || 0) + 1; });
+  const porMotorista = {};
+  d.forEach(x => { const n = (x.driver && x.driver.name) || 'sem motorista identificado';
+    porMotorista[n] = (porMotorista[n] || 0) + 1; });
+
+  $('desviosGrade').innerHTML =
+    caixa('Por tipo', 'natureza da ocorrência',
+      barras(porTipo, t => DESVIO_NOME[t] || t.toLowerCase().replace(/_/g,' '), DESVIO_COR)) +
+    caixa('Por motorista', 'quem acumulou mais ocorrências',
+      barras(porMotorista, n => n, () => '#6b5b95')) +
+    caixa('Por dia', 'os dez dias com mais ocorrências',
+      barras(porDia, k => k.split('-').reverse().slice(0,2).join('/'), () => '#5d6785'));
+
+  const linhas = d.slice().sort((a,b) => (b.event_time||'').localeCompare(a.event_time||'')).slice(0, 300);
+  $('desviosTab').innerHTML = linhas.length ? '<table class="tbl"><thead><tr>' +
+    '<th>Quando</th><th>Ocorrência</th><th>Veículo</th><th>Motorista</th><th>Unidade</th></tr></thead><tbody>' +
+    linhas.map(x => {
+      const pos = x.location ? [x.location.latitude, x.location.longitude] : null;
+      return '<tr class="clic" onclick="verNoMapa(' + (pos ? pos[0] + ',' + pos[1] : '') + ')">' +
+      '<td>' + esc(quando(x.event_time)) + '</td>' +
+      '<td><span class="marca" style="background:' + DESVIO_COR(x.event_type) + '">' +
+        esc(DESVIO_NOME[x.event_type] || x.event_type) + '</span></td>' +
+      '<td class="pl">' + esc((x.vehicle && x.vehicle.license_plate) || '—') + '</td>' +
+      '<td>' + esc((x.driver && x.driver.name) || '—') + '</td>' +
+      '<td>' + esc(pos ? (unidadeDe(pos) || '—') : '—') + '</td></tr>';
+    }).join('') + '</tbody></table>'
+    : '<div class="carregando">' + (G.desvios_erro || 'Nenhum desvio no período.') + '</div>';
+}
+
+function quando(t){
+  if(!t) return '—';
+  const p = String(t).replace('T',' ').split(' ');
+  const d = (p[0] || '').split('-');
+  return d.length === 3 ? d[2] + '/' + d[1] + ' ' + (p[1] || '').slice(0,5) : t;
+}
+
+// Clicar numa ocorrência leva ao ponto exato onde ela aconteceu.
+function verNoMapa(lat, lon){
+  if(lat == null || lon == null) return;
+  irPara('mapa', document.querySelectorAll('.abas button')[1]);
+  setTimeout(() => {
+    MAPA.invalidateSize();
+    MAPA.setView([lat, lon], 17);
+    L.circleMarker([lat, lon], {radius:13, color:'#c8412f', weight:3, fill:false})
+      .addTo(MAPA).bindPopup('<div class="pop"><h4>Desvio registrado aqui</h4></div>').openPopup();
+  }, 120);
+}
+
+/* ------------------------------------------------------------- motoristas */
+
+function renderMotoristas(){
+  const r = (G.ranking && G.ranking.data) ? G.ranking.data : null;
+  if(!r){ $('motSub').textContent = G.ranking_erro ? '⚠ ' + G.ranking_erro : 'sem dados no período';
+    $('motTab').innerHTML = '<div class="carregando">Sem ranking de condução no período.</div>'; return; }
+
+  $('motSub').textContent = r.count + ' motorista(s) · nota média da frota ' + r.average_fleet_score +
+    (r.unclassified_count ? ' · ' + r.unclassified_count + ' sem rodagem suficiente para nota' : '');
+
+  const d = listaDesvios();
+  const porMot = {};
+  d.forEach(x => { const id = (x.driver && x.driver.id) || ''; if(id) porMot[id] = (porMot[id]||0)+1; });
+
+  $('motTab').innerHTML = '<table class="tbl"><thead><tr>' +
+    '<th>#</th><th>Motorista</th><th>Nota</th><th>Rodou</th><th>Tempo ao volante</th>' +
+    '<th>km por ocorrência</th><th>Desvios</th></tr></thead><tbody>' +
+    (r.rows || []).map(l => {
+      const nome = (l.driver && l.driver.name) || (l.vehicle && l.vehicle.license_plate) || '—';
+      const id = (l.driver && l.driver.id) || '';
+      const nota = l.score;
+      const cor = nota == null ? 'var(--slate2)' : nota >= 70 ? 'var(--green)'
+        : nota >= 40 ? 'var(--amber)' : 'var(--red)';
+      return '<tr><td>' + (l.rank || '—') + '</td>' +
+        '<td><b>' + esc(nome) + '</b></td>' +
+        '<td><b style="color:' + cor + '">' + (nota != null ? nota : '—') + '</b></td>' +
+        '<td>' + num(l.driven_distance_in_km, 1) + ' km</td>' +
+        '<td>' + horas(l.driven_time_in_minutes) + '</td>' +
+        '<td>' + num(l.kms_per_event, 1) + '</td>' +
+        '<td>' + (porMot[id] || 0) + '</td></tr>';
+    }).join('') + '</tbody></table>';
+}
+
+/* ----------------------------------------------------------- custos e uso */
+
+function renderCustos(){
+  const km = listaKm(), oc = listaOcioso(), mu = listaMultas();
+  const totalKm = km.reduce((a,v) => a + (v.distance_driven_in_km || 0), 0);
+  const idle = somaOcioso('total_idle_in_minutes');
+  const litros = somaOcioso('fuel_consumption');
+  const custo = somaOcioso('fuel_costs');
+  const rodando = somaOcioso('total_trip_duration_in_minutes');
+
+  $('custoSub').textContent = 'últimos ' + PERIODO + ' dias · ' + km.length + ' veículo(s) com registro';
+
+  $('custoKpis').innerHTML = [
+    {r:'Distância total', v: num(totalKm) + ' km', s:'somando toda a frota'},
+    {r:'Tempo rodando', v: horas(rodando), s:'motor em deslocamento'},
+    {r:'Tempo ocioso', v: horas(idle),
+      s: rodando ? num(idle / Math.max(1, idle + rodando) * 100, 1) + '% do motor ligado' : '',
+      cls: idle > rodando * .3 ? 'alerta' : ''},
+    {r:'Combustível desperdiçado', v: num(litros, 1) + ' L', s: reais(custo) + ' parados com o motor ligado',
+      cls: custo > 0 ? 'alerta' : ''},
+    {r:'Multas no período', v: mu.length,
+      s: reais(mu.reduce((a,m) => a + (m.value_in_cents||0), 0)/100), cls: mu.length ? 'alerta' : 'bom'},
+    {r:'Manutenção', v: manutencaoResumo().n, s: manutencaoResumo().s, cls: manutencaoResumo().cls}
+  ].map(c => '<div class="kpi ' + (c.cls||'') + '"><div class="r">' + c.r + '</div>' +
+    '<div class="v">' + c.v + '</div><div class="s">' + c.s + '</div></div>').join('');
+
+  $('custoGrade').innerHTML =
+    caixa('Quilometragem por veículo', 'quem mais rodou no período',
+      barras(km.reduce((a,v) => { a[v.license_plate||'—'] = v.distance_driven_in_km; return a; }, {}),
+        p => p, () => '#2f8f9e', v => num(v,1) + ' km')) +
+    caixa('Desperdício por veículo', 'reais queimados parado com o motor ligado',
+      barras(oc.reduce((a,o) => { a[(o.vehicle&&o.vehicle.license_plate)||'—'] = o.fuel_costs||0; return a; }, {}),
+        p => p, () => '#c8412f', v => reais(v)));
+
+  const porPlaca = {};
+  km.forEach(v => porPlaca[v.license_plate] = {placa:v.license_plate, modelo:[v.brand,v.model].filter(Boolean).join(' '),
+    grupo:v.group || '', km:v.distance_driven_in_km || 0});
+  oc.forEach(o => { const pl = o.vehicle && o.vehicle.license_plate; if(!pl) return;
+    porPlaca[pl] = Object.assign(porPlaca[pl] || {placa:pl, modelo:'', grupo:'', km:0}, {
+      idle:o.total_idle_in_minutes||0, pct:o.percentage_idle, litros:o.fuel_consumption||0,
+      custo:o.fuel_costs||0, rodando:o.total_trip_duration_in_minutes||0}); });
+
+  const linhas = Object.values(porPlaca).sort((a,b) => (b.km||0) - (a.km||0));
+  $('custoTab').innerHTML = linhas.length ? '<table class="tbl"><thead><tr>' +
+    '<th>Veículo</th><th>Grupo</th><th>Rodou</th><th>Tempo rodando</th><th>Ocioso</th>' +
+    '<th>% ocioso</th><th>Combustível parado</th></tr></thead><tbody>' +
+    linhas.map(v => '<tr><td><span class="pl">' + esc(v.placa) + '</span><br>' +
+      '<span style="color:var(--slate);font-size:11.5px">' + esc(v.modelo||'') + '</span></td>' +
+      '<td>' + esc(v.grupo||'—') + '</td>' +
+      '<td>' + num(v.km,1) + ' km</td>' +
+      '<td>' + horas(v.rodando) + '</td>' +
+      '<td>' + horas(v.idle) + '</td>' +
+      '<td>' + (v.pct != null ? num(v.pct,1) + '%' : '—') + '</td>' +
+      '<td>' + (v.custo ? reais(v.custo) : '—') + '</td></tr>').join('') + '</tbody></table>'
+    : '<div class="carregando">Sem dados de uso no período.</div>';
+}
+
+// A Cobli devolve manutenção em três baldes; esta frota pode nem usar o módulo.
+function manutencaoResumo(){
+  const m = G.manutencao;
+  if(!m) return {n:'—', s: G.manutencao_erro ? 'não foi possível consultar' : 'sem dados', cls:''};
+  const conta = o => o && typeof o === 'object' ? Object.keys(o).length : 0;
+  const atras = conta(m.delayed), prox = conta(m.warning), ok = conta(m.onTime);
+  if(!atras && !prox && !ok) return {n:'—', s:'módulo de manutenção não utilizado na Cobli', cls:''};
+  return {n: atras, s: atras ? 'atrasada(s) · ' + prox + ' próxima(s)' : prox + ' próxima(s) · ' + ok + ' em dia',
+    cls: atras ? 'alerta' : 'bom'};
+}
+
+
+/* Sem o proxy ligado não há o que consultar, mas a tela precisa mostrar
+   o formato do que ela entrega. Estes números são inventados, e a faixa
+   amarela no alto da página diz isso o tempo todo. */
+function painelSimulado(){
+  const agora = Date.now();
+  const placas = SIM_FROTA ? SIM_FROTA.map(c => c.placa) : SIM_PLACAS;
+  const tipos = ['DISTRACTED_DRIVING','PHONE_USAGE','YAWN','TAILGATING','HARD_BREAK',
+                 'FAST_ACCELERATION','SPEEDY_TURN'];
+  const sorteio = (n, lista) => lista[Math.floor((Math.sin(n * 12.9898) * 43758.5453 % 1 + 1) % 1 * lista.length)];
+
+  G.desvios = { data: Array.from({length: 86}, (_, i) => ({
+    event_type: sorteio(i, tipos),
+    event_time: new Date(agora - (i * 7 + 3) * 36e5).toISOString().slice(0,19).replace('T',' '),
+    vehicle: { license_plate: sorteio(i + 7, placas) },
+    driver: { id: 'd' + (i % 6), name: SIM_NOMES[i % SIM_NOMES.length] || 'Motorista ' + (i % 6 + 1) },
+    location: { latitude: CENTRO[0] + (sorteio(i, [-1,1]) * (i % 9) * 0.0012),
+                longitude: CENTRO[1] + (sorteio(i+3, [-1,1]) * (i % 7) * 0.0015) }
+  })) };
+
+  G.km = { data: placas.map((pl, i) => ({ license_plate: pl, brand: 'Fiat',
+    model: ['Strada','Ducato','Fiorino'][i % 3], group: SIM_GRUPOS[i % 3],
+    distance_driven_in_km: 320 + (i * 137) % 900 })) };
+
+  G.ocioso = placas.map((pl, i) => ({
+    vehicle: { license_plate: pl, group: { name: SIM_GRUPOS[i % 3] } },
+    total_idle_in_minutes: 40 + (i * 53) % 300,
+    total_trip_duration_in_minutes: 600 + (i * 91) % 1400,
+    percentage_idle: 3 + (i * 7) % 14,
+    fuel_consumption: 2 + (i * 3) % 11,
+    fuel_costs: 18 + (i * 29) % 90
+  }));
+
+  G.ranking = { data: { count: 8, average_fleet_score: 62, classified_count: 6, unclassified_count: 2,
+    rows: SIM_NOMES.filter(Boolean).map((n, i) => ({ rank: i + 1, driver: { id: 'd' + i, name: n },
+      score: 88 - i * 9, driven_distance_in_km: 900 - i * 80,
+      driven_time_in_minutes: 1400 - i * 120, kms_per_event: 120 - i * 11 })) } };
+
+  G.multas = { content: [] };
+  G.manutencao = { delayed: {}, warning: {}, onTime: {} };
+
+  renderGeral(); renderDesvios(); renderMotoristas(); renderCustos();
+}
+
 /* ============================================================= boot */
 
 function porta(ic, titulo, texto, rotulo, destino){
@@ -1588,6 +2092,9 @@ function comecar(){
           'esta tela mostra como o acompanhamento se comporta.');
   }
   ciclo();
+  periodoBotoes();
+  if(!SIMULANDO) carregarGestao();
+  else painelSimulado();
   clearInterval(RELOGIO);
   RELOGIO = setInterval(()=>{ if(!document.hidden) ciclo(); }, INTERVALO);
   setInterval(()=>{ if(!document.hidden && QUANDO) $('vivoTx').textContent =
