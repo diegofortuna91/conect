@@ -1012,11 +1012,36 @@ function base(k, bt){
   CAMADAS[k].addTo(MAPA); CAMADAS[k].bringToBack();
 }
 
+/* Enquadrar a frota.
+
+   Um rastreador que ficou para trás — desinstalado, em manutenção, ainda
+   sem veículo — continua reportando a última posição de onde parou, que
+   pode ser a outro estado. Se ele entrasse na conta, o mapa abriria para
+   caber o país inteiro e a operação viraria um pontinho. Então:
+     • sem filtro pedido, enquadra só quem está se comunicando;
+     • e ainda descarta quem está a mais de ~220 km do miolo da frota.
+   Para ver os que ficaram para trás, é só clicar no contador
+   "sem comunicação", que pede aquele grupo explicitamente. */
 function enquadrar(estado){
-  const p = VEICULOS.filter(v=>v.pos && (!estado || v.estado===estado)).map(v=>v.pos);
-  if(!p.length) return;
+  let v = VEICULOS.filter(x=>x.pos && (!estado || x.estado===estado));
+  if(!estado){
+    const comSinal = v.filter(x=>x.estado !== 'semsinal');
+    if(comSinal.length) v = comSinal;
+    v = semDistantes(v);
+  }
+  if(!v.length) return;
   SEGUIR = false;
-  MAPA.fitBounds(L.latLngBounds(p).pad(.3), {maxZoom:16});
+  MAPA.fitBounds(L.latLngBounds(v.map(x=>x.pos)).pad(.3), {maxZoom:16});
+}
+
+const LONGE = 2;   // graus, cerca de 220 km
+
+function semDistantes(lista){
+  if(lista.length < 3) return lista;
+  const meio = a => { const o=[...a].sort((x,y)=>x-y); return o[Math.floor(o.length/2)]; };
+  const mLat = meio(lista.map(v=>v.pos[0])), mLon = meio(lista.map(v=>v.pos[1]));
+  const perto = lista.filter(v=>Math.abs(v.pos[0]-mLat) <= LONGE && Math.abs(v.pos[1]-mLon) <= LONGE);
+  return perto.length ? perto : lista;
 }
 
 /* ============================================================ dados */
