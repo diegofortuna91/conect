@@ -7,11 +7,12 @@
      Com sinal, o auditor sempre abre a versão mais nova; sem sinal, cai no cache.
    • ícones e manifests → cache primeiro, que não mudam.
    Ao publicar uma versão nova, troque o número do CACHE abaixo. */
-const CACHE = 'connect-v31';
+const CACHE = 'connect-v32';
 const ARQUIVOS = [
   './',
   './index.html',
   './painel.html',
+  './frotas.html',
   './manifest.webmanifest',
   './painel.webmanifest',
   './icon-192.png',

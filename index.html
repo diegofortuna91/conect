@@ -2853,7 +2853,8 @@ const MODULOS = [
   {id:'rdo',   nome:'RDO', desc:'Relatório Diário de Obra — efetivo, serviços executados e ocorrências do dia', icone:'📋', cor:'#44607d', ativo:false},
   {id:'parada',nome:'Paradas de Manutenção', desc:'Escopo, avanço físico e recursos da parada', icone:'⏱', cor:'#c8412f', ativo:false},
   {id:'qua',   nome:'Qualidade', desc:'Inspeções, não conformidades e ações corretivas', icone:'✓', cor:'#7cb342', ativo:false},
-  {id:'frota', nome:'Gestão de Frotas', desc:'Veículos, manutenção, abastecimento e documentação', icone:'🚚', cor:'#6b5b95', ativo:false},
+  {id:'frota', nome:'Gestão de Frotas', desc:'Acompanhamento em tempo real, manutenção, desvios e custos da frota', icone:'🚚', cor:'#6b5b95', ativo:true, url:'frotas.html',
+   perfis:['coord','gerencia','admin'], qtd:'frota ao vivo'},
   {id:'equip', nome:'Equipamentos de Campo', desc:'Gerador, compressor, caminhão vácuo, munck e afins', icone:'⚙', cor:'#e8963c', ativo:false},
   {id:'rh',    nome:'Recursos Humanos', desc:'Efetivo, absenteísmo e indicadores de pessoas', icone:'👥', cor:'#2c3a80', ativo:false}
 ];
@@ -2937,10 +2938,10 @@ function renderHub(){
     </div>
     ${cardPendencia()}
     ${MODULOS.map(m=>`
-      <div class="modcard ${m.ativo?'':'off'}" onclick="${m.ativo?"abrirModulo('"+m.id+"')":"toast('Módulo em desenvolvimento')"}">
+      <div class="modcard ${moduloLiberado(m)?'':'off'}" onclick="abrirModulo('${m.id}')">
         <div class="ic" style="background:${m.cor}">${m.icone}</div>
         <div class="tx"><b>${m.nome}</b><span>${m.desc}</span></div>
-        <div class="rt">${m.ativo?`<span class="qtd">${m.qtd}</span><span class="arw">›</span>`:'<span class="soon">em breve</span>'}</div>
+        <div class="rt">${moduloLiberado(m)?`<span class="qtd">${m.qtd||''}</span><span class="arw">›</span>`:`<span class="soon">${m.ativo?'coordenação':'em breve'}</span>`}</div>
       </div>`).join('')}
     <div class="modcard" style="margin-top:16px" onclick="setView('menu');setTimeout(()=>{const e=document.getElementById('secProc'); e&&e.scrollIntoView({behavior:'smooth'});},120)">
       <div class="ic" style="background:var(--slate)">📚</div>
@@ -2952,7 +2953,17 @@ function renderHub(){
       <a href="#" style="color:inherit" onclick="event.preventDefault();diagnostico()">recursos do aparelho</a>
     </div>`;
 }
-function abrirModulo(id){ if(id==='sms') setView('menu'); }
+function moduloLiberado(m){
+  return !!(m && m.ativo && (!m.perfis || (USUARIO && m.perfis.includes(USUARIO.perfil))));
+}
+function abrirModulo(id){
+  const m = MODULOS.find(x=>x.id===id);
+  if(!m) return;
+  if(!moduloLiberado(m))
+    return toast(m.ativo ? 'Módulo liberado para a coordenação' : 'Módulo em desenvolvimento');
+  if(m.url){ location.href = m.url; return; }
+  if(id==='sms') setView('menu');
+}
 
 /* ---------- Menu do módulo SMS ---------- */
 function renderMenu(){

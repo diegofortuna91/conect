@@ -6004,13 +6004,13 @@ function renderInicio(){
     <div class="secTit">Módulos da plataforma</div>
     <div class="modgrid">
       ${MODULOS.map(m=>`
-        <div class="modcard ${m.ativo?'on':'off'}" ${m.ativo?`onclick="setVista('sms')"`:''}>
+        <div class="modcard ${moduloLiberado(m)?'on':'off'}" ${moduloLiberado(m)?`onclick="abrirModuloPlataforma('${m.id}')"`:''}>
           <div class="top">
             <div class="ic" style="background:${m.cor}">${m.icone}</div>
             <div><h3>${m.nome}</h3></div>
           </div>
           <p>${m.desc}</p>
-          <span class="st ${m.ativo?'on':''}">${m.ativo ? (m.qtd||'em operação') : 'em breve'}</span>
+          <span class="st ${moduloLiberado(m)?'on':''}">${moduloLiberado(m) ? (m.qtd||'em operação') : (m.ativo ? 'acesso restrito' : 'em breve')}</span>
         </div>`).join('')}
     </div>
 
@@ -6031,20 +6031,32 @@ const MODULOS = [
   {id:'rdo',   nome:'RDO', desc:'Relatório Diário de Obra — efetivo, serviços executados e ocorrências do dia', icone:'📋', cor:'#44607d', ativo:false},
   {id:'parada',nome:'Paradas de Manutenção', desc:'Escopo, avanço físico e recursos da parada', icone:'⏱', cor:'#c8412f', ativo:false},
   {id:'qua',   nome:'Qualidade', desc:'Inspeções, não conformidades e ações corretivas', icone:'✓', cor:'#7cb342', ativo:false},
-  {id:'frota', nome:'Gestão de Frotas', desc:'Veículos, manutenção, abastecimento e documentação', icone:'🚚', cor:'#6b5b95', ativo:false},
+  {id:'frota', nome:'Gestão de Frotas', desc:'Acompanhamento em tempo real, manutenção, desvios e custos da frota', icone:'🚚', cor:'#6b5b95', ativo:true, url:'frotas.html',
+   perfis:['coord','gerencia','admin'], qtd:'frota ao vivo'},
   {id:'equip', nome:'Equipamentos de Campo', desc:'Gerador, compressor, caminhão vácuo, munck e afins', icone:'⚙', cor:'#e8963c', ativo:false},
   {id:'rh',    nome:'Recursos Humanos', desc:'Efetivo, absenteísmo e indicadores de pessoas', icone:'👥', cor:'#2c3a80', ativo:false}
 ];
+/* Um módulo pode exigir perfil. Quem não tem continua vendo o card,
+   desativado — mas dizendo "acesso restrito", que é o que de fato é. */
+function moduloLiberado(m){
+  return !!(m && m.ativo && (!m.perfis || (USUARIO && m.perfis.includes(USUARIO.perfil))));
+}
+function abrirModuloPlataforma(id){
+  const m = MODULOS.find(x=>x.id===id);
+  if(!m || !moduloLiberado(m)) return;
+  if(m.url){ location.href = m.url; return; }
+  setVista('sms');
+}
 function abrirModulos(){
   openModal('Service Connect · Módulos da plataforma', `
     <p style="font-size:13.5px;color:var(--slate);margin:0 0 16px;line-height:1.55">
       Cada setor traz seus próprios indicadores para o mesmo painel de contrato.
       O módulo de SMS está ativo; os demais entram conforme a implantação.</p>
     ${MODULOS.map(m=>`
-      <div class="modrow ${m.ativo?'on':''}" ${m.ativo?`onclick="closeModal();setVista('sms')"`:''}>
+      <div class="modrow ${moduloLiberado(m)?'on':''}" ${moduloLiberado(m)?`onclick="closeModal();abrirModuloPlataforma('${m.id}')"`:''}>
         <div class="ic" style="background:${m.cor}">${m.icone}</div>
         <div class="tx"><b>${m.nome}</b><span>${m.desc}</span></div>
-        ${m.ativo?`<span class="st on">${m.qtd}</span>`:'<span class="st">em breve</span>'}
+        ${moduloLiberado(m)?`<span class="st on">${m.qtd||'em operação'}</span>`:`<span class="st">${m.ativo?'acesso restrito':'em breve'}</span>`}
       </div>`).join('')}`);
 }
 function renderProcs(){
