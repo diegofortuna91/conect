@@ -1970,10 +1970,12 @@ function simPasso(){
    valem as datas digitadas. PERIODO continua existindo porque várias
    contas precisam do número de dias da janela. */
 const ATALHOS = [
-  {id:'7',   rotulo:'7 dias'},
-  {id:'30',  rotulo:'30 dias'},
-  {id:'90',  rotulo:'90 dias'},
-  {id:'mes', rotulo:'mês passado'},
+  {id:'hoje',  rotulo:'hoje'},
+  {id:'ontem', rotulo:'ontem'},
+  {id:'7',     rotulo:'7 dias'},
+  {id:'30',    rotulo:'30 dias'},
+  {id:'90',    rotulo:'90 dias'},
+  {id:'mes',   rotulo:'mês passado'},
   {id:'livre', rotulo:'escolher'}
 ];
 const RECORTE = { atalho:'30', ini:'', fim:'', veiculo:'', motorista:'', tipo:'', unidade:'' };
@@ -2030,6 +2032,16 @@ function irPara(aba, bt){
 function periodoAtual(){
   const hoje = new Date(); hoje.setHours(0,0,0,0);
   const a = RECORTE.atalho;
+
+  if(a === 'hoje'){
+    const d = dia(hoje);
+    return {ini: d, fim: d, dias: 1, rotulo: 'hoje, ' + br(d)};
+  }
+
+  if(a === 'ontem'){
+    const d = dia(hoje.getTime() - 864e5);
+    return {ini: d, fim: d, dias: 1, rotulo: 'ontem, ' + br(d)};
+  }
 
   if(a === 'mes'){
     const f = new Date(hoje.getFullYear(), hoje.getMonth(), 0);        // último dia do mês anterior
@@ -3256,9 +3268,14 @@ function renderItinerario(){
 
   const km = t.reduce((a,x) => a + (x.distance_in_meters || 0), 0) / 1000;
   const motorista = (t.find(x => x.driver && x.driver.name) || {}).driver;
+  const cond = condutoresDe(ITIN_VEIC);
+  const quem = motorista ? motorista.name
+    : cond.length === 1 ? cond[0].nome
+    : cond.length ? cond.length + ' motoristas no período'
+    : 'motorista não identificado';
   $('itinSub').textContent = t.length
     ? ITIN_VEIC + ' · ' + ITIN_DIA.split('-').reverse().join('/') + ' · ' + t.length +
-      ' trecho(s) · ' + num(km,1) + ' km' + (motorista ? ' · ' + motorista.name : ' · motorista não identificado')
+      ' trecho(s) · ' + num(km,1) + ' km · ' + quem
     : 'sem trechos para este veículo neste dia';
 
   $('itinLista').innerHTML = t.length ? t.map((x,i) => {
@@ -3277,6 +3294,90 @@ function renderItinerario(){
 
 const hora = d => d ? String(d).slice(11,16) : '--:--';
 
+/* O caminho do dia, ponto a ponto.
+   Guardado por veículo e dia: trocar de aba e voltar não refaz a
+   consulta, e são mais de mil pontos por dia de trabalho. */
+const PERCURSOS = {};
+
+function aparelhoDe(placa){
+  const t = listaTrechos().find(x => (x.vehicle||{}).license_plate === placa && x.device_id);
+  if(t) return t.device_id;
+  const v = ((G.cadastro && G.cadastro.data) || [])
+    .find(x => String(x.license_plate || '').trim() === placa);
+  return (v && v.device_id) || '';
+}
+
+async function percursoDoDia(placa, diaISO){
+  const chave = placa + '|' + diaISO;
+  if(PERCURSOS[chave] !== undefined) return PERCURSOS[chave];
+  if(SIMULANDO) return (PERCURSOS[chave] = percursoSimulado(placa, diaISO));
+  const ap = aparelhoDe(placa);
+  if(!ap || !diaISO) return (PERCURSOS[chave] = null);
+  try{
+    const ini = new Date(diaISO + 'T00:00:00-03:00').getTime();
+    const fim = new Date(diaISO + 'T23:59:59-03:00').getTime();
+    const j = await buscar('trajeto-pontos', {dispositivo: ap, inicio: ini, fim: fim});
+    const g = j && j.path_geojson;
+    if(!g || !g.geometry || !Array.isArray(g.geometry.coordinates)) return (PERCURSOS[chave] = null);
+    return (PERCURSOS[chave] = g);
+  }catch(e){
+    PERCURSOS[chave] = null;
+    return null;
+  }
+}
+
+/* Quanto tempo o carro ficou nesta parada. A lista de paradas da Cobli
+   traz o horário mas nem sempre a duração; os trechos trazem a duração.
+   Casar os dois pelo horário dá o número sem inventar nada. */
+function duracaoDaParada(stop, trechos){
+  const p = stop.properties || {};
+  const idle = (p.idle_off_duration_in_millis || 0) + (p.idle_on_duration_in_millis || 0);
+  if(idle) return idle / 60000;
+  const t0 = Date.parse(p.start_time);
+  if(isNaN(t0)) return null;
+  let melhor = null, dist = 12 * 60e3;
+  trechos.forEach(x => {
+    if(x.distance_in_meters) return;                       // só os trechos parados
+    const t1 = Date.parse((x.start_address || {}).date);
+    if(isNaN(t1)) return;
+    const d = Math.abs(t1 - t0);
+    if(d < dist){ dist = d; melhor = x; }
+  });
+  return melhor ? (melhor.duration_in_seconds || 0) / 60 : null;
+}
+
+/* Na demonstração não há Cobli do outro lado, então o caminho é
+   inventado a partir dos trechos simulados — serve para ver o desenho
+   e para os testes passarem pelo mesmo código do dia a dia. */
+function percursoSimulado(placa, diaISO){
+  const t = listaTrechos()
+    .filter(x => (x.vehicle||{}).license_plate === placa)
+    .filter(x => String((x.start_address||{}).date || '').slice(0,10) === diaISO)
+    .sort((a,b) => String(a.start_address.date).localeCompare(String(b.start_address.date)));
+  if(!t.length) return null;
+  const coords = [], paradas = [];
+  t.forEach(x => {
+    const s = x.start_address || {}, e = x.end_address || {};
+    if(s.latitude == null) return;
+    const passos = 14;
+    for(let k = 0; k <= passos; k++){
+      const f = k / passos;
+      // uma curva leve, para não sair uma reta perfeita
+      const desvio = Math.sin(f * Math.PI) * 0.0012;
+      coords.push([s.longitude + (e.longitude - s.longitude) * f + desvio,
+                   s.latitude  + (e.latitude  - s.latitude)  * f + desvio * .6]);
+    }
+    if(!x.distance_in_meters)
+      paradas.push({type:'Feature', geometry:{type:'Point', coordinates:[s.longitude, s.latitude]},
+        properties:{start_time: s.date, geofences: x.geofence_name ? [{name:x.geofence_name}] : [],
+          idle_off_duration_in_millis: (x.duration_in_seconds||0) * 1000,
+          idle_on_duration_in_millis: 0}});
+  });
+  if(!coords.length) return null;
+  return {type:'Feature', geometry:{type:'LineString', coordinates: coords},
+    properties:{stops: paradas}};
+}
+
 function desenharItinerario(t){
   if(typeof L === 'undefined') return;
   if(!MAPA_ITIN){
@@ -3287,29 +3388,81 @@ function desenharItinerario(t){
     MAPA_ITIN.setView(CENTRO, 13);
   }
   GRUPO_ITIN.clearLayers();
+
+  // Enquanto o caminho de verdade não chega, mostra os pontos que já
+  // estão em memória — sem ligar um ao outro, porque a reta entre dois
+  // deles atravessa a baía e mente sobre o trajeto.
   const pontos = [];
-  t.forEach((x, i) => {
-    const s = x.start_address || {}, e = x.end_address || {};
+  t.forEach((x) => {
+    const s = x.start_address || {};
     if(s.latitude == null) return;
-    const p1 = [s.latitude, s.longitude], p2 = [e.latitude, e.longitude];
-    pontos.push(p1); if(e.latitude != null) pontos.push(p2);
-    const mesmo = e.latitude === s.latitude && e.longitude === s.longitude;
-    if(!mesmo) L.polyline([p1, p2], {color:'#3a4a9e', weight:3, opacity:.75}).addTo(GRUPO_ITIN);
-    L.circleMarker(p1, {radius:7, color:'#fff', weight:2,
-      fillColor: mesmo ? '#e8963c' : '#7cb342', fillOpacity:1})
-      .bindPopup('<div class="pop"><h4>' + (mesmo ? 'Parada' : 'Partida') + ' ' + (i+1) + '</h4>' +
-        linha('Horário', hora(s.date) + ' → ' + hora(e.date)) +
-        linha('Local', esc(x.geofence_name || unidadeDe(p1) || '—')) +
-        (mesmo ? linha('Tempo parado', horas((x.duration_in_seconds||0)/60))
-               : linha('Distância', num((x.distance_in_meters||0)/1000,1) + ' km')) +
-        '</div>').addTo(GRUPO_ITIN);
+    pontos.push([s.latitude, s.longitude]);
   });
-  // O mapa do itinerário também nasce numa aba escondida: só depois de se
+  if(pontos.length) marcarPontos(pontos);
+
+  const placa = ITIN_VEIC, diaAlvo = ITIN_DIA;
+  percursoDoDia(placa, diaAlvo).then(g => {
+    // A pessoa pode ter trocado de veículo ou de dia enquanto isso.
+    if(placa !== ITIN_VEIC || diaAlvo !== ITIN_DIA || !MAPA_ITIN) return;
+    if(!g){ ajustarItin(pontos); return; }
+    desenharPercurso(g, t);
+  });
+
+  ajustarItin(pontos);
+}
+
+function marcarPontos(pontos){
+  pontos.forEach(p => L.circleMarker(p, {radius:4, color:'#fff', weight:1.5,
+    fillColor:'#8b94ad', fillOpacity:.9}).addTo(GRUPO_ITIN));
+}
+
+function ajustarItin(pontos){
+  // O mapa do itinerário nasce numa aba escondida: só depois de se
   // remedir é que o enquadramento sai certo.
   setTimeout(() => {
     MAPA_ITIN.invalidateSize();
-    if(pontos.length) MAPA_ITIN.fitBounds(L.latLngBounds(pontos).pad(.25), {maxZoom:16});
+    if(pontos && pontos.length)
+      MAPA_ITIN.fitBounds(L.latLngBounds(pontos).pad(.2), {maxZoom:16});
   }, 80);
+}
+
+/* Desenha o que a Cobli registrou: a linha por onde o carro passou e as
+   paradas que ela identificou, numeradas na ordem do dia. */
+function desenharPercurso(g, trechos){
+  GRUPO_ITIN.clearLayers();
+
+  const coords = g.geometry.coordinates
+    .filter(c => Array.isArray(c) && c.length >= 2 && isFinite(c[0]) && isFinite(c[1]))
+    .map(c => [c[1], c[0]]);                      // GeoJSON vem [lon, lat]
+  if(!coords.length) return;
+
+  // Duas linhas: uma larga e clara por baixo, para o traçado sobressair
+  // na imagem de satélite, e a fina por cima.
+  L.polyline(coords, {color:'#fff', weight:6, opacity:.55}).addTo(GRUPO_ITIN);
+  L.polyline(coords, {color:'#3a4a9e', weight:3, opacity:.95}).addTo(GRUPO_ITIN);
+
+  const paradas = ((g.properties || {}).stops || [])
+    .filter(s => s.geometry && Array.isArray(s.geometry.coordinates))
+    .sort((a,b) => String((a.properties||{}).start_time)
+      .localeCompare(String((b.properties||{}).start_time)));
+
+  paradas.forEach((s, i) => {
+    const p = [s.geometry.coordinates[1], s.geometry.coordinates[0]];
+    const pr = s.properties || {};
+    const min = duracaoDaParada(s, trechos);
+    const cerca = (pr.geofences || []).map(c => c.name || c).filter(Boolean).join(', ');
+    const primeira = i === 0, ultima = i === paradas.length - 1;
+    L.circleMarker(p, {radius: primeira || ultima ? 9 : 7, color:'#fff', weight:2,
+      fillColor: primeira ? '#7cb342' : ultima ? '#c8412f' : '#e8963c', fillOpacity:1})
+      .bindPopup('<div class="pop"><h4>' +
+        (primeira ? 'Partida' : ultima ? 'Última parada' : 'Parada ' + (i+1)) + '</h4>' +
+        linha('Chegou', hora(pr.start_time)) +
+        (min != null ? linha('Ficou', horas(min)) : '') +
+        linha('Local', esc(cerca || unidadeDe(p) || '—')) +
+        '</div>').addTo(GRUPO_ITIN);
+  });
+
+  ajustarItin(coords);
 }
 
 function focarTrecho(i){
