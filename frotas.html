@@ -2425,8 +2425,11 @@ function animarBarras(){
 function colunas(serie, formato, cor){
   const itens = Object.entries(serie);
   if(!itens.length) return '<div class="carregando">Sem dados no período.</div>';
-  const A = 190, base = A - 30, alt = base - 24;
-  const W = Math.max(620, itens.length * 46);
+  // Rótulo de duas linhas precisa de mais altura embaixo e de colunas
+  // mais espaçadas, senão um intervalo encosta no outro.
+  const duasLinhas = itens.some(i => String(i[0]).includes('\n'));
+  const A = duasLinhas ? 202 : 190, base = A - (duasLinhas ? 42 : 30), alt = base - 24;
+  const W = Math.max(620, itens.length * (duasLinhas ? 64 : 46));
   const max = Math.max(1, ...itens.map(i => i[1]));
   const vao = W / itens.length, lar = Math.min(26, vao * 0.5);
   const y = v => base - (v / max) * alt;
@@ -2443,10 +2446,15 @@ function colunas(serie, formato, cor){
         (v ? '<text x="' + (x + lar/2).toFixed(1) + '" y="' + (y(v) - 5).toFixed(1) +
           '" font-size="10.5" font-weight="800" fill="#2c3a80" text-anchor="middle">' +
           (formato ? formato(v) : num(v)) + '</text>' : '') +
-        '<text x="' + (i*vao + vao/2).toFixed(1) + '" y="' + (base + 15) +
-          '" font-size="10.5" font-weight="700" fill="#5d6785" text-anchor="middle">' + esc(k) + '</text>';
+        String(k).split('\n').map((linha, li) =>
+          '<text x="' + (i*vao + vao/2).toFixed(1) + '" y="' + (base + 15 + li*12) +
+          '" font-size="10.5" font-weight="700" fill="#5d6785" text-anchor="middle">' +
+          esc(linha) + '</text>').join('');
     }).join('') + '</svg></div>';
 }
+
+const ddmm = d => String(d.getDate()).padStart(2,'0') + '/' +
+  String(d.getMonth() + 1).padStart(2,'0');
 
 /* Agrupa uma série diária por dia, semana ou mês.
    A semana segue a mesma convenção do módulo de SMS: começa na segunda. */
@@ -2462,7 +2470,12 @@ function agrupar(porDia, passo){
         String(d.getFullYear()).slice(2);
     } else if(passo === 'semana'){
       const seg = new Date(d); seg.setDate(d.getDate() - ((d.getDay() + 6) % 7));
-      chave = seg.getDate() + '/' + (seg.getMonth() + 1);
+      const dom = new Date(seg); dom.setDate(seg.getDate() + 6);
+      // A semana em curso não terminou: cortar no fim do período evita
+      // que uma semana de dois dias se apresente como semana cheia.
+      const limite = new Date(periodoAtual().fim + 'T12:00:00');
+      const fimDaSemana = dom > limite ? limite : dom;
+      chave = ddmm(seg) + '\na ' + ddmm(fimDaSemana);
     } else {
       chave = d.getDate() + '/' + (d.getMonth() + 1);
     }
