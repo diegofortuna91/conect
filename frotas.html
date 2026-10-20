@@ -2518,8 +2518,11 @@ function renderDesvios(){
     caixa('O que a Cobli pode detectar', 'tipos configurados nesta frota', catalogoDesvios(porTipo));
   renderDetalheVeiculo();
 
-  const linhas = d.slice().sort((a,b) => (b.event_time||'').localeCompare(a.event_time||'')).slice(0, 300);
+  const ordenados = d.slice().sort((a,b) => (b.event_time||'').localeCompare(a.event_time||''));
+  const TETO = 500;
+  const linhas = ordenados.slice(0, TETO);
   G.naTela = linhas;          // a ficha precisa achar de volta a ocorrência clicada
+  const cortou = ordenados.length > TETO;
   $('desviosTab').innerHTML = linhas.length ? '<table class="tbl"><thead><tr>' +
     '<th>Quando</th><th>Ocorrência</th><th>Veículo</th><th>Motorista</th><th>Unidade</th>' +
     '<th>Câmera</th></tr></thead><tbody>' +
@@ -2538,7 +2541,9 @@ function renderDesvios(){
           esc(m.id) + '\',\'' + esc(DESVIO_NOME[x.event_type] || x.event_type) + ' · ' +
           esc(x.vehicle.license_plate) + '\')">▶ vídeo</button>' : '—';
       })() + '</td></tr>';
-    }).join('') + '</tbody></table>'
+    }).join('') + '</tbody></table>' +
+    (cortou ? '<div class="carregando">mostrando as ' + num(TETO) + ' mais recentes de ' +
+      num(ordenados.length) + ' — estreite o período ou use um recorte para ver o resto</div>' : '')
     : '<div class="carregando">' + (G.desvios_erro || 'Nenhum desvio no período.') + '</div>';
   animarBarras();
 }
@@ -2725,9 +2730,7 @@ function renderCameras(){
       barras(porVeic, p => p, () => '#3a4a9e'));
 
   $('camLista').innerHTML = ms.length
-    ? '<div class="mids">' + ms.slice(0, 60).map(cartaoMidia).join('') + '</div>' +
-      (ms.length > 60 ? '<div class="carregando">mostrando as 60 mais recentes de ' +
-        num(ms.length) + '</div>' : '')
+    ? '<div class="mids">' + ms.map(cartaoMidia).join('') + '</div>'
     : '<div class="caixa"><div class="carregando">' +
       (erro ? erro : 'Nenhuma gravação neste período. ' +
        'Se a frota tem câmera e mesmo assim não aparece nada, vale conferir com a Cobli ' +
