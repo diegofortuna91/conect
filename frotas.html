@@ -2054,7 +2054,9 @@ function colunas(serie, formato, cor){
    A semana segue a mesma convenção do módulo de SMS: começa na segunda. */
 function agrupar(porDia, passo){
   const fora = {};
-  Object.entries(porDia).forEach(([iso, v]) => {
+  // A Cobli devolve os dias fora de ordem; sem ordenar aqui, o gráfico
+  // sai com 18/10 antes de 2/10 e ninguém entende a série.
+  Object.entries(porDia).sort((a,b) => a[0].localeCompare(b[0])).forEach(([iso, v]) => {
     const d = new Date(iso + 'T12:00:00');
     let chave;
     if(passo === 'mes'){
