@@ -930,13 +930,35 @@ body{display:flex;flex-direction:column}
 .caixa .sub{padding:1px 15px 0;font-size:11.5px;color:var(--slate)}
 .caixa .corpo2{padding:12px 15px 15px}
 
-/* -------------------------------------------------------------- barras */
-.barra-l{display:flex;align-items:center;gap:9px;margin-bottom:7px;font-size:12.5px}
-.barra-l .nm{width:40%;min-width:120px;color:var(--ink);font-weight:600;white-space:nowrap;overflow:hidden;
+/* --------------------------------------------------------------- barras
+   Mesmo desenho do placar de auditorias do módulo de SMS: trilha de 9px,
+   raio 5, fundo --line2 e preenchimento na cor do indicador. O que muda
+   aqui é só a entrada animada. */
+.meta-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line2)}
+.meta-row:last-child{border-bottom:0}
+.meta-row .who{font-size:13px;font-weight:700;min-width:0;flex:1;white-space:nowrap;overflow:hidden;
   text-overflow:ellipsis}
-.barra-l .tr{flex:1;background:var(--line2);border-radius:5px;height:14px;overflow:hidden}
-.barra-l .tr i{display:block;height:100%;border-radius:5px}
-.barra-l .vl{width:70px;text-align:right;font-weight:800;color:var(--slate);white-space:nowrap}
+.meta-row .who small{display:block;font-weight:500;color:var(--slate2);font-size:11.5px}
+.bar-track{flex:2;height:9px;border-radius:5px;background:var(--line2);overflow:hidden;min-width:70px}
+.bar-fill{height:100%;border-radius:5px;width:0;transition:width .8s cubic-bezier(.22,.8,.26,1)}
+.meta-row .pc{font-size:13px;font-weight:800;min-width:84px;text-align:right;
+  font-variant-numeric:tabular-nums;color:var(--slate)}
+.meta-row.clic{cursor:pointer}
+.meta-row.clic:hover .who{color:var(--navy)}
+
+/* colunas verticais, como os gráficos do SMS */
+.colunas{width:100%;height:auto;display:block;font-family:inherit}
+.colunas rect{transition:height .8s cubic-bezier(.22,.8,.26,1), y .8s cubic-bezier(.22,.8,.26,1)}
+
+/* números que sobem ao aparecer */
+.kpi .v{font-variant-numeric:tabular-nums}
+@keyframes entra{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+.kpi,.caixa{animation:entra .45s ease both}
+.kpi:nth-child(2),.caixa:nth-child(2){animation-delay:.05s}
+.kpi:nth-child(3),.caixa:nth-child(3){animation-delay:.1s}
+.kpi:nth-child(4),.caixa:nth-child(4){animation-delay:.15s}
+.kpi:nth-child(5){animation-delay:.2s}
+.kpi:nth-child(6){animation-delay:.25s}
 
 /* -------------------------------------------------------------- tabela */
 .tbl{width:100%;border-collapse:collapse;font-size:12.5px}
@@ -985,7 +1007,8 @@ body{display:flex;flex-direction:column}
   <button onclick="irPara('mapa',this)">Mapa ao vivo</button>
   <button onclick="irPara('desvios',this)">Desvios</button>
   <button onclick="irPara('motoristas',this)">Motoristas</button>
-  <button onclick="irPara('custos',this)">Custos e uso</button>
+  <button onclick="irPara('custos',this)">Uso e custos</button>
+  <button onclick="irPara('itinerario',this)">Itinerário do dia</button>
 </nav>
 
 <div class="area" id="area">
@@ -1000,8 +1023,13 @@ body{display:flex;flex-direction:column}
 
 <section class="pag" id="pg-desvios"><div class="rolo">
   <div class="cab"><div><h2>Desvios de condução</h2>
-    <p id="desviosSub">carregando…</p></div></div>
+    <p id="desviosSub">carregando…</p></div>
+    <div class="periodo" id="passoDesvio"></div></div>
+  <div class="caixa" style="margin-bottom:13px"><h3>Desvios no tempo</h3>
+    <div class="sub" id="desvioSerieSub">quando aconteceram</div>
+    <div class="corpo2" id="desvioSerie"></div></div>
   <div class="grade" id="desviosGrade"></div>
+  <div id="desvioDetalhe"></div>
   <div class="secao">Ocorrências</div>
   <div class="caixa"><div class="rolavel" id="desviosTab"></div></div>
 </div></section>
@@ -1009,16 +1037,37 @@ body{display:flex;flex-direction:column}
 <section class="pag" id="pg-motoristas"><div class="rolo">
   <div class="cab"><div><h2>Motoristas</h2>
     <p id="motSub">carregando…</p></div></div>
-  <div class="caixa"><div class="rolavel" id="motTab"></div></div>
+  <div class="caixa" style="margin-bottom:13px"><div class="rolavel" id="motTab"></div></div>
+  <div class="secao">Onde a frota mais parou</div>
+  <div class="grade" id="locaisGrade"></div>
 </div></section>
 
 <section class="pag" id="pg-custos"><div class="rolo">
   <div class="cab"><div><h2>Uso e custos da frota</h2>
-    <p id="custoSub">carregando…</p></div></div>
+    <p id="custoSub">carregando…</p></div>
+    <div class="periodo" id="passoKm"></div></div>
   <div class="kpis" id="custoKpis"></div>
+  <div class="caixa" style="margin-bottom:13px"><h3>Quilometragem no tempo</h3>
+    <div class="sub" id="kmSerieSub">distância rodada pela frota</div>
+    <div class="corpo2" id="kmSerie"></div></div>
   <div class="grade" id="custoGrade"></div>
   <div class="secao">Por veículo</div>
   <div class="caixa"><div class="rolavel" id="custoTab"></div></div>
+</div></section>
+
+<section class="pag" id="pg-itinerario"><div class="rolo">
+  <div class="cab"><div><h2>Itinerário do dia</h2>
+    <p id="itinSub">escolha o veículo e o dia</p></div>
+    <div class="periodo" id="itinDias"></div></div>
+  <div class="filtros" id="itinVeics" style="padding:0 0 12px"></div>
+  <div class="grade" style="grid-template-columns:minmax(300px,1fr) minmax(360px,1.4fr)">
+    <div class="caixa"><h3>Paradas e partidas</h3>
+      <div class="sub">na ordem em que aconteceram</div>
+      <div class="corpo2" id="itinLista"></div></div>
+    <div class="caixa"><h3>Percurso</h3>
+      <div class="sub">pontos de partida e de chegada de cada trecho</div>
+      <div id="itinMapa" style="height:480px;border-radius:0 0 var(--r) var(--r)"></div></div>
+  </div>
 </div></section>
 
 <section class="pag mapa" id="pg-mapa">
@@ -1785,6 +1834,7 @@ function irPara(aba, bt){
     MAPA.invalidateSize();
     if(!MAPA._enquadrado){ MAPA._enquadrado = true; enquadrar(); }
   }, 60);
+  if(aba === 'itinerario' && MAPA_ITIN) setTimeout(() => { MAPA_ITIN.invalidateSize(); renderItinerario(); }, 60);
 }
 
 function periodoBotoes(){
@@ -1797,6 +1847,14 @@ function periodoBotoes(){
 function mudarPeriodo(d){ PERIODO = d; periodoBotoes(); carregarGestao(); }
 
 /* --------------------------------------------------------- as consultas */
+
+const JORNADA_H = 8.8;        // jornada considerada no cálculo de ocupação
+let PASSO_KM = 'dia', PASSO_DESVIO = 'dia', VEIC_FOCO = '', ITIN_VEIC = '', ITIN_DIA = '';
+
+/* Os endpoints /herbie-1.1/stats/* não aceitam data em ISO: querem o
+   instante em milissegundos. Os demais querem o dia. Por isso há duas
+   formas de pedir o mesmo período. */
+const emMillis = iso => new Date(iso + 'T00:00:00-03:00').getTime();
 
 async function carregarGestao(){
   const ini = dia(Date.now() - (PERIODO - 1) * 864e5), fim = dia(Date.now());
@@ -1814,20 +1872,68 @@ async function carregarGestao(){
     pedir('ocioso', 'ocioso', {inicio: ini, fim: fim}),
     pedir('ranking', 'ranking', {inicio: ini, fim: fim}),
     pedir('multas', 'multas', {inicio: ini, fim: fim}),
-    pedir('manutencao', 'manutencao')
+    pedir('manutencao', 'manutencao'),
+    pedir('viagens', 'viagens', {inicio: emMillis(ini), fim: emMillis(fim) + 864e5 - 1}),
+    pedir('paradas', 'paradas-veiculo', {inicio: emMillis(ini), fim: emMillis(fim) + 864e5 - 1}),
+    pedir('tipos', 'tipos-alerta'),
+    carregarTrajetos(ini, fim)
   ]);
 
-  renderGeral(); renderDesvios(); renderMotoristas(); renderCustos();
+  renderGeral(); renderDesvios(); renderMotoristas(); renderUso(); prepararItinerario();
 }
 
-/* ------------------------------------------------------------ visão geral */
+/* Os trechos vêm paginados. Três páginas (1500 trechos) cobrem com folga
+   um mês desta frota; se um dia não cobrirem, a tela avisa em vez de
+   mostrar um número pela metade. */
+async function carregarTrajetos(ini, fim){
+  const todos = [];
+  G.trajetos_truncado = false;
+  try{
+    for(let pagina = 1; pagina <= 3; pagina++){
+      const j = await buscar('trajetos', {inicio: ini, fim: fim, limite: 500, pagina: pagina});
+      const lote = (j && j.data) ? j.data : [];
+      todos.push(...lote);
+      if(lote.length < 500) break;
+      if(pagina === 3) G.trajetos_truncado = true;
+    }
+    G.trajetos = todos; G.trajetos_erro = '';
+  }catch(e){ G.trajetos = []; G.trajetos_erro = e.message; }
+}
+
+/* ------------------------------------------------------------ atalhos */
 
 function listaDesvios(){ return (G.desvios && G.desvios.data) ? G.desvios.data : []; }
 function listaKm(){ return (G.km && G.km.data) ? G.km.data : []; }
 function listaOcioso(){ return Array.isArray(G.ocioso) ? G.ocioso : []; }
 function listaMultas(){ return (G.multas && G.multas.content) ? G.multas.content : []; }
-
+function listaTrechos(){ return Array.isArray(G.trajetos) ? G.trajetos : []; }
 function somaOcioso(c){ return listaOcioso().reduce((a,o) => a + (o[c] || 0), 0); }
+
+// A série diária da Cobli vem com a data em milissegundos na chave.
+function serieDiaria(obj){
+  const fora = {};
+  Object.entries(obj || {}).forEach(([ms, v]) => {
+    const d = new Date(Number(ms));
+    if(isNaN(d)) return;
+    fora[d.toISOString().slice(0,10)] = (v && v.sum != null) ? v.sum : v;
+  });
+  return fora;
+}
+
+function kmPorDia(){
+  const v = G.viagens;
+  return v ? serieDiaria(v.fleet_daily_distance_stats_in_meters) : {};
+}
+
+// Quantos dias do período realmente tiveram movimento — é sobre eles que
+// a jornada de 8,8 h faz sentido, não sobre domingos parados.
+function diasComMovimento(){
+  const d = kmPorDia();
+  const n = Object.values(d).filter(v => v > 0).length;
+  return Math.max(1, n);
+}
+
+/* ------------------------------------------------------------ visão geral */
 
 function renderGeral(){
   const d = listaDesvios(), km = listaKm(), mu = listaMultas();
@@ -1836,6 +1942,8 @@ function renderGeral(){
   const comSinal = VEICULOS.filter(v => v.estado !== 'semsinal').length;
   const nota = (G.ranking && G.ranking.data) ? G.ranking.data.average_fleet_score : null;
   const valorMultas = mu.reduce((a,m) => a + (m.value_in_cents || 0), 0) / 100;
+  const ligado = somaOcioso('total_engine_activity_in_minutes');
+  const ocioso = somaOcioso('total_idle_in_minutes');
 
   $('geralSub').textContent = 'últimos ' + PERIODO + ' dias · ' + VEICULOS.length +
     ' veículo(s) no rastreamento';
@@ -1844,10 +1952,10 @@ function renderGeral(){
     {r:'Frota rastreada', v: VEICULOS.length, s: comSinal + ' com comunicação'},
     {r:'Rodados no período', v: num(totalKm) + ' km',
       s: km.length ? num(totalKm / Math.max(1, km.length)) + ' km por veículo' : 'sem dados'},
+    {r:'Motor ligado', v: horas(ligado),
+      s: ligado ? num(ocioso / ligado * 100, 1) + '% disso parado' : 'sem dados'},
     {r:'Desvios de condução', v: d.length,
       s: graves ? graves + ' de atenção ao volante' : 'nenhum grave', cls: graves ? 'alerta' : ''},
-    {r:'Motor ocioso', v: horas(somaOcioso('total_idle_in_minutes')),
-      s: reais(somaOcioso('fuel_costs')) + ' em combustível'},
     {r:'Multas', v: mu.length, s: mu.length ? reais(valorMultas) : 'nenhuma no período',
       cls: mu.length ? 'alerta' : 'bom'},
     {r:'Nota de condução', v: nota != null ? nota : '—',
@@ -1875,6 +1983,7 @@ function renderGeral(){
       barras(listaOcioso().reduce((a,o) => {
           a[(o.vehicle && o.vehicle.license_plate) || '—'] = o.total_idle_in_minutes || 0; return a; }, {}),
         p => p, () => '#e8963c', v => horas(v)));
+  animarBarras();
 }
 
 function caixa(titulo, sub, dentro){
@@ -1882,37 +1991,128 @@ function caixa(titulo, sub, dentro){
     '<div class="corpo2">' + dentro + '</div></div>';
 }
 
-function barras(mapa, rotulo, cor, formato){
-  const itens = Object.entries(mapa).filter(e => e[1]).sort((a,b) => b[1] - a[1]).slice(0, 10);
+
+function barras(mapa, rotulo, cor, formato, aoClicar){
+  const itens = Object.entries(mapa).filter(e => e[1]).sort((a,b) => b[1] - a[1]).slice(0, 12);
   if(!itens.length) return '<div class="carregando">Sem dados no período.</div>';
   const max = Math.max(...itens.map(i => i[1]));
-  return itens.map(([k, v]) =>
-    '<div class="barra-l"><span class="nm" title="' + esc(rotulo(k)) + '">' + esc(rotulo(k)) + '</span>' +
-    '<span class="tr"><i style="width:' + Math.max(3, (v/max)*100) + '%;background:' + cor(k) + '"></i></span>' +
-    '<span class="vl">' + (formato ? formato(v) : num(v)) + '</span></div>').join('');
+  return itens.map(([k, v]) => {
+    const r = rotulo(k);
+    const sub = typeof r === 'object' ? r.sub : '';
+    const nome = typeof r === 'object' ? r.nome : r;
+    return '<div class="meta-row ' + (aoClicar ? 'clic' : '') + '"' +
+      (aoClicar ? ' onclick="' + aoClicar(k) + '"' : '') + '>' +
+      '<span class="who" title="' + esc(nome) + '">' + esc(nome) +
+        (sub ? '<small>' + esc(sub) + '</small>' : '') + '</span>' +
+      '<span class="bar-track"><i class="bar-fill" data-w="' + Math.max(3, (v/max)*100) +
+        '" style="background:' + cor(k) + '"></i></span>' +
+      '<span class="pc">' + (formato ? formato(v) : num(v)) + '</span></div>';
+  }).join('');
+}
+
+// As barras nascem com largura zero; um quadro depois recebem a largura
+// real e deslizam até ela. Sem isso a animação não dispara.
+function animarBarras(){
+  requestAnimationFrame(() => {
+    document.querySelectorAll('.bar-fill[data-w]').forEach(b => {
+      b.style.width = b.dataset.w + '%';
+      b.removeAttribute('data-w');
+    });
+  });
+}
+
+/* Colunas verticais para séries no tempo — dia, semana ou mês.
+   Mesmo espírito dos gráficos do SMS: grade leve, valor em cima da
+   coluna e rótulo embaixo. */
+function colunas(serie, formato, cor){
+  const itens = Object.entries(serie);
+  if(!itens.length) return '<div class="carregando">Sem dados no período.</div>';
+  const A = 190, base = A - 30, alt = base - 24;
+  const W = Math.max(620, itens.length * 46);
+  const max = Math.max(1, ...itens.map(i => i[1]));
+  const vao = W / itens.length, lar = Math.min(26, vao * 0.5);
+  const y = v => base - (v / max) * alt;
+  const grade = [0, .25, .5, .75, 1].map(g =>
+    '<line x1="0" y1="' + (base - g*alt).toFixed(1) + '" x2="' + W + '" y2="' + (base - g*alt).toFixed(1) +
+    '" stroke="#eef1f9" stroke-width="1"/>').join('');
+  return '<div style="overflow-x:auto"><svg viewBox="0 0 ' + W + ' ' + A + '" class="colunas" ' +
+    'style="min-width:' + Math.min(W, 620) + 'px">' + grade +
+    itens.map(([k, v], i) => {
+      const x = i*vao + (vao - lar)/2;
+      const h = Math.max(1, base - y(v));
+      return '<rect x="' + x.toFixed(1) + '" y="' + y(v).toFixed(1) + '" width="' + lar.toFixed(1) +
+        '" height="' + h.toFixed(1) + '" rx="3" fill="' + (cor || '#3a4a9e') + '"/>' +
+        (v ? '<text x="' + (x + lar/2).toFixed(1) + '" y="' + (y(v) - 5).toFixed(1) +
+          '" font-size="10.5" font-weight="800" fill="#2c3a80" text-anchor="middle">' +
+          (formato ? formato(v) : num(v)) + '</text>' : '') +
+        '<text x="' + (i*vao + vao/2).toFixed(1) + '" y="' + (base + 15) +
+          '" font-size="10.5" font-weight="700" fill="#5d6785" text-anchor="middle">' + esc(k) + '</text>';
+    }).join('') + '</svg></div>';
+}
+
+/* Agrupa uma série diária por dia, semana ou mês.
+   A semana segue a mesma convenção do módulo de SMS: começa na segunda. */
+function agrupar(porDia, passo){
+  const fora = {};
+  Object.entries(porDia).forEach(([iso, v]) => {
+    const d = new Date(iso + 'T12:00:00');
+    let chave;
+    if(passo === 'mes'){
+      chave = d.toLocaleDateString('pt-BR', {month:'short'}).replace('.', '') + '/' +
+        String(d.getFullYear()).slice(2);
+    } else if(passo === 'semana'){
+      const seg = new Date(d); seg.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+      chave = seg.getDate() + '/' + (seg.getMonth() + 1);
+    } else {
+      chave = d.getDate() + '/' + (d.getMonth() + 1);
+    }
+    fora[chave] = (fora[chave] || 0) + v;
+  });
+  return fora;
 }
 
 /* ---------------------------------------------------------------- desvios */
 
+function passos(id, atual, aoTrocar){
+  return ['dia','semana','mes'].map(k =>
+    '<button class="' + (k === atual ? 'on' : '') + '" onclick="' + aoTrocar + "('" + k + "')" + '">' +
+    (k === 'dia' ? 'Por dia' : k === 'semana' ? 'Por semana' : 'Por mês') + '</button>').join('');
+}
+function trocarPassoDesvio(p){ PASSO_DESVIO = p; renderDesvios(); }
+function trocarPassoKm(p){ PASSO_KM = p; renderUso(); }
+
 function renderDesvios(){
   const d = listaDesvios();
+  $('passoDesvio').innerHTML = passos('passoDesvio', PASSO_DESVIO, 'trocarPassoDesvio');
   if(G.desvios_erro){ $('desviosSub').textContent = '⚠ ' + G.desvios_erro; }
   else $('desviosSub').textContent = d.length + ' ocorrência(s) nos últimos ' + PERIODO + ' dias';
 
-  const porTipo = {}; d.forEach(x => porTipo[x.event_type] = (porTipo[x.event_type] || 0) + 1);
   const porDia = {};
-  d.forEach(x => { const k = (x.event_time || '').slice(0,10); if(k) porDia[k] = (porDia[k] || 0) + 1; });
-  const porMotorista = {};
+  d.forEach(x => { const k = (x.event_time || '').slice(0,10); if(k) porDia[k] = (porDia[k]||0) + 1; });
+  $('desvioSerie').innerHTML = colunas(agrupar(porDia, PASSO_DESVIO), v => num(v), '#c8412f');
+  $('desvioSerieSub').textContent = PASSO_DESVIO === 'dia' ? 'ocorrências por dia'
+    : PASSO_DESVIO === 'semana' ? 'ocorrências por semana (semana começa na segunda)'
+    : 'ocorrências por mês';
+
+  // O catálogo da Cobli diz tudo o que pode ser detectado; mostrar os tipos
+  // com zero ocorrência é tão informativo quanto mostrar os que aconteceram.
+  const porTipo = {}; d.forEach(x => porTipo[x.event_type] = (porTipo[x.event_type] || 0) + 1);
+  const porVeic = {};
+  d.forEach(x => { const p = (x.vehicle && x.vehicle.license_plate) || '—';
+    porVeic[p] = (porVeic[p] || 0) + 1; });
+  const porMot = {};
   d.forEach(x => { const n = (x.driver && x.driver.name) || 'sem motorista identificado';
-    porMotorista[n] = (porMotorista[n] || 0) + 1; });
+    porMot[n] = (porMot[n] || 0) + 1; });
 
   $('desviosGrade').innerHTML =
     caixa('Por tipo', 'natureza da ocorrência',
       barras(porTipo, t => DESVIO_NOME[t] || t.toLowerCase().replace(/_/g,' '), DESVIO_COR)) +
+    caixa('Por veículo', 'clique para ver quem dirigiu',
+      barras(porVeic, p => p, () => '#3a4a9e', null, p => "focarVeiculo('" + p + "')")) +
     caixa('Por motorista', 'quem acumulou mais ocorrências',
-      barras(porMotorista, n => n, () => '#6b5b95')) +
-    caixa('Por dia', 'os dez dias com mais ocorrências',
-      barras(porDia, k => k.split('-').reverse().slice(0,2).join('/'), () => '#5d6785'));
+      barras(porMot, n => n, () => '#6b5b95')) +
+    caixa('O que a Cobli pode detectar', 'tipos configurados nesta frota', catalogoDesvios(porTipo));
+  renderDetalheVeiculo();
 
   const linhas = d.slice().sort((a,b) => (b.event_time||'').localeCompare(a.event_time||'')).slice(0, 300);
   $('desviosTab').innerHTML = linhas.length ? '<table class="tbl"><thead><tr>' +
@@ -1928,6 +2128,59 @@ function renderDesvios(){
       '<td>' + esc(pos ? (unidadeDe(pos) || '—') : '—') + '</td></tr>';
     }).join('') + '</tbody></table>'
     : '<div class="carregando">' + (G.desvios_erro || 'Nenhum desvio no período.') + '</div>';
+  animarBarras();
+}
+
+function catalogoDesvios(ocorridos){
+  const cat = Array.isArray(G.tipos) ? G.tipos.filter(t => t.enabled) : [];
+  if(!cat.length) return '<div class="carregando">' +
+    (G.tipos_erro ? '⚠ ' + G.tipos_erro : 'A Cobli não devolveu o catálogo.') + '</div>';
+  return '<div class="fv-tags" style="gap:6px">' + cat.map(t => {
+    const n = ocorridos[t.name_identifier] || 0;
+    return '<b style="background:' + (n ? DESVIO_COR(t.name_identifier) : '#c9cfdd') + '" ' +
+      'title="' + esc(t.name_identifier) + '">' + esc(t.name) + (n ? ' · ' + n : '') + '</b>';
+  }).join('') + '</div>';
+}
+
+/* Estratificar um veículo: quem esteve ao volante no período e quantos
+   desvios couberam a cada um. Quando a Cobli não identifica o motorista
+   no evento, a tela diz isso em vez de chutar. */
+function focarVeiculo(placa){
+  VEIC_FOCO = (VEIC_FOCO === placa) ? '' : placa;
+  renderDetalheVeiculo();
+  if(VEIC_FOCO) $('desvioDetalhe').scrollIntoView({behavior:'smooth', block:'center'});
+}
+
+function renderDetalheVeiculo(){
+  const el = $('desvioDetalhe'); if(!el) return;
+  if(!VEIC_FOCO){ el.innerHTML = ''; return; }
+  const d = listaDesvios().filter(x => x.vehicle && x.vehicle.license_plate === VEIC_FOCO);
+  const porMot = {}, semMot = d.filter(x => !(x.driver && x.driver.name)).length;
+  d.forEach(x => { const n = x.driver && x.driver.name; if(n) porMot[n] = (porMot[n]||0) + 1; });
+
+  const trechos = listaTrechos().filter(t => t.vehicle && t.vehicle.license_plate === VEIC_FOCO);
+  const condutores = {};
+  trechos.forEach(t => { const n = t.driver && t.driver.name;
+    if(n) condutores[n] = (condutores[n] || 0) + 1; });
+
+  const porTipo = {}; d.forEach(x => porTipo[x.event_type] = (porTipo[x.event_type]||0) + 1);
+
+  el.innerHTML = '<div class="secao">' + esc(VEIC_FOCO) + ' · detalhe' +
+    '<button class="bt" style="margin-left:auto;box-shadow:none;background:var(--line2)" ' +
+    'onclick="focarVeiculo(\'\')">fechar</button></div>' +
+    '<div class="grade">' +
+    caixa('Desvios deste veículo', d.length + ' no período',
+      barras(porTipo, t => DESVIO_NOME[t] || t, DESVIO_COR)) +
+    caixa('Por motorista', semMot ? semMot + ' ocorrência(s) sem motorista identificado'
+        : 'todas com motorista identificado',
+      Object.keys(porMot).length ? barras(porMot, n => n, () => '#6b5b95')
+        : '<div class="carregando">A Cobli não identificou o motorista nestas ocorrências.<br>' +
+          'Depende da identificação por crachá ou aplicativo estar ativa na frota.</div>') +
+    caixa('Quem dirigiu', 'trechos registrados com condutor',
+      Object.keys(condutores).length ? barras(condutores, n => n, () => '#2f8f9e', v => v + ' trecho(s)')
+        : '<div class="carregando">Nenhum trecho deste veículo trouxe o condutor.</div>') +
+    '</div>';
+  animarBarras();
 }
 
 function quando(t){
@@ -1937,7 +2190,6 @@ function quando(t){
   return d.length === 3 ? d[2] + '/' + d[1] + ' ' + (p[1] || '').slice(0,5) : t;
 }
 
-// Clicar numa ocorrência leva ao ponto exato onde ela aconteceu.
 function verNoMapa(lat, lon){
   if(lat == null || lon == null) return;
   irPara('mapa', document.querySelectorAll('.abas button')[1]);
@@ -1954,57 +2206,99 @@ function verNoMapa(lat, lon){
 function renderMotoristas(){
   const r = (G.ranking && G.ranking.data) ? G.ranking.data : null;
   if(!r){ $('motSub').textContent = G.ranking_erro ? '⚠ ' + G.ranking_erro : 'sem dados no período';
-    $('motTab').innerHTML = '<div class="carregando">Sem ranking de condução no período.</div>'; return; }
-
-  $('motSub').textContent = r.count + ' motorista(s) · nota média da frota ' + r.average_fleet_score +
-    (r.unclassified_count ? ' · ' + r.unclassified_count + ' sem rodagem suficiente para nota' : '');
-
-  const d = listaDesvios();
-  const porMot = {};
-  d.forEach(x => { const id = (x.driver && x.driver.id) || ''; if(id) porMot[id] = (porMot[id]||0)+1; });
-
-  $('motTab').innerHTML = '<table class="tbl"><thead><tr>' +
-    '<th>#</th><th>Motorista</th><th>Nota</th><th>Rodou</th><th>Tempo ao volante</th>' +
-    '<th>km por ocorrência</th><th>Desvios</th></tr></thead><tbody>' +
-    (r.rows || []).map(l => {
-      const nome = (l.driver && l.driver.name) || (l.vehicle && l.vehicle.license_plate) || '—';
-      const id = (l.driver && l.driver.id) || '';
-      const nota = l.score;
-      const cor = nota == null ? 'var(--slate2)' : nota >= 70 ? 'var(--green)'
-        : nota >= 40 ? 'var(--amber)' : 'var(--red)';
-      return '<tr><td>' + (l.rank || '—') + '</td>' +
-        '<td><b>' + esc(nome) + '</b></td>' +
-        '<td><b style="color:' + cor + '">' + (nota != null ? nota : '—') + '</b></td>' +
-        '<td>' + num(l.driven_distance_in_km, 1) + ' km</td>' +
-        '<td>' + horas(l.driven_time_in_minutes) + '</td>' +
-        '<td>' + num(l.kms_per_event, 1) + '</td>' +
-        '<td>' + (porMot[id] || 0) + '</td></tr>';
-    }).join('') + '</tbody></table>';
+    $('motTab').innerHTML = '<div class="carregando">Sem ranking de condução no período.</div>'; }
+  else {
+    $('motSub').textContent = r.count + ' motorista(s) · nota média da frota ' + r.average_fleet_score +
+      (r.unclassified_count ? ' · ' + r.unclassified_count + ' sem rodagem suficiente para nota' : '');
+    const d = listaDesvios();
+    const porMot = {};
+    d.forEach(x => { const id = (x.driver && x.driver.id) || ''; if(id) porMot[id] = (porMot[id]||0)+1; });
+    $('motTab').innerHTML = '<table class="tbl"><thead><tr>' +
+      '<th>#</th><th>Motorista</th><th>Nota</th><th>Rodou</th><th>Tempo ao volante</th>' +
+      '<th>km por ocorrência</th><th>Desvios</th></tr></thead><tbody>' +
+      (r.rows || []).map(l => {
+        const nome = (l.driver && l.driver.name) || (l.vehicle && l.vehicle.license_plate) || '—';
+        const id = (l.driver && l.driver.id) || '';
+        const nota = l.score;
+        const cor = nota == null ? 'var(--slate2)' : nota >= 70 ? 'var(--green)'
+          : nota >= 40 ? 'var(--amber)' : 'var(--red)';
+        return '<tr><td>' + (l.rank || '—') + '</td>' +
+          '<td><b>' + esc(nome) + '</b></td>' +
+          '<td><b style="color:' + cor + '">' + (nota != null ? nota : '—') + '</b></td>' +
+          '<td>' + num(l.driven_distance_in_km, 1) + ' km</td>' +
+          '<td>' + horas(l.driven_time_in_minutes) + '</td>' +
+          '<td>' + num(l.kms_per_event, 1) + '</td>' +
+          '<td>' + (porMot[id] || 0) + '</td></tr>';
+      }).join('') + '</tbody></table>';
+  }
+  renderLocais();
 }
 
-/* ----------------------------------------------------------- custos e uso */
+/* Onde a frota parou. Cada trecho termina num lugar; quando esse lugar é
+   um local de interesse cadastrado na Cobli, ele vem com nome. Os demais
+   são agrupados pela unidade da refinaria em que caíram. */
+function renderLocais(){
+  const t = listaTrechos();
+  const porLocal = {}, porMotLocal = {};
+  t.forEach(x => {
+    const fim = x.end_address;
+    if(!fim) return;
+    const nome = x.geofence_name ||
+      (fim.latitude != null ? unidadeDe([fim.latitude, fim.longitude]) : '') || 'fora das áreas mapeadas';
+    porLocal[nome] = (porLocal[nome] || 0) + 1;
+    const mot = (x.driver && x.driver.name) || '';
+    if(mot){ porMotLocal[mot] = porMotLocal[mot] || {}; porMotLocal[mot][nome] = (porMotLocal[mot][nome]||0)+1; }
+  });
 
-function renderCustos(){
+  const motoristas = Object.keys(porMotLocal);
+  $('locaisGrade').innerHTML =
+    caixa('Locais mais visitados', t.length + ' trecho(s) no período',
+      barras(porLocal, n => n, () => '#6b5b95', v => v + ' parada(s)')) +
+    (motoristas.length
+      ? motoristas.slice(0,3).map(m => caixa('Paradas de ' + m, 'onde este motorista parou',
+          barras(porMotLocal[m], n => n, () => '#2f8f9e', v => v + ' parada(s)'))).join('')
+      : caixa('Paradas por motorista', 'depende da identificação do motorista',
+          '<div class="carregando">Os trechos deste período vieram sem motorista identificado,' +
+          ' então não dá para separar as paradas por pessoa.<br>' +
+          'Com a identificação ativa na Cobli, esta caixa passa a mostrar o nome de cada um.</div>'));
+  animarBarras();
+}
+
+/* ------------------------------------------------------------- uso e custos */
+
+function renderUso(){
   const km = listaKm(), oc = listaOcioso(), mu = listaMultas();
   const totalKm = km.reduce((a,v) => a + (v.distance_driven_in_km || 0), 0);
   const idle = somaOcioso('total_idle_in_minutes');
   const litros = somaOcioso('fuel_consumption');
   const custo = somaOcioso('fuel_costs');
   const rodando = somaOcioso('total_trip_duration_in_minutes');
+  const ligado = somaOcioso('total_engine_activity_in_minutes');
+  const parado = somaOcioso('total_stopped_in_minutes');
+  const dias = diasComMovimento();
+  const jornada = dias * JORNADA_H * 60 * Math.max(1, km.length);   // minutos de jornada da frota
 
-  $('custoSub').textContent = 'últimos ' + PERIODO + ' dias · ' + km.length + ' veículo(s) com registro';
+  $('passoKm').innerHTML = passos('passoKm', PASSO_KM, 'trocarPassoKm');
+  $('custoSub').textContent = 'últimos ' + PERIODO + ' dias · ' + km.length +
+    ' veículo(s) com registro · ' + dias + ' dia(s) com movimento';
+
+  const serie = agrupar(kmPorDia(), PASSO_KM);
+  $('kmSerie').innerHTML = colunas(serie, v => num(v/1000, 0), '#2f8f9e');
+  $('kmSerieSub').textContent = 'quilômetros rodados pela frota, ' +
+    (PASSO_KM === 'dia' ? 'dia a dia' : PASSO_KM === 'semana' ? 'por semana' : 'por mês');
 
   $('custoKpis').innerHTML = [
-    {r:'Distância total', v: num(totalKm) + ' km', s:'somando toda a frota'},
-    {r:'Tempo rodando', v: horas(rodando), s:'motor em deslocamento'},
-    {r:'Tempo ocioso', v: horas(idle),
-      s: rodando ? num(idle / Math.max(1, idle + rodando) * 100, 1) + '% do motor ligado' : '',
+    {r:'Motor ligado', v: horas(ligado),
+      s: jornada ? num(ligado / jornada * 100, 1) + '% da jornada de ' + JORNADA_H + ' h' : ''},
+    {r:'Rodando', v: horas(rodando),
+      s: ligado ? num(rodando / ligado * 100, 1) + '% do motor ligado' : ''},
+    {r:'Parado com motor ligado', v: horas(idle),
+      s: jornada ? num(idle / jornada * 100, 1) + '% da jornada' : '',
       cls: idle > rodando * .3 ? 'alerta' : ''},
-    {r:'Combustível desperdiçado', v: num(litros, 1) + ' L', s: reais(custo) + ' parados com o motor ligado',
-      cls: custo > 0 ? 'alerta' : ''},
-    {r:'Multas no período', v: mu.length,
-      s: reais(mu.reduce((a,m) => a + (m.value_in_cents||0), 0)/100), cls: mu.length ? 'alerta' : 'bom'},
-    {r:'Manutenção', v: manutencaoResumo().n, s: manutencaoResumo().s, cls: manutencaoResumo().cls}
+    {r:'Parado e desligado', v: horas(parado), s:'veículo à disposição'},
+    {r:'Distância total', v: num(totalKm) + ' km', s:'somando toda a frota'},
+    {r:'Combustível desperdiçado', v: num(litros, 1) + ' L', s: reais(custo) + ' com o motor parado',
+      cls: custo > 0 ? 'alerta' : ''}
   ].map(c => '<div class="kpi ' + (c.cls||'') + '"><div class="r">' + c.r + '</div>' +
     '<div class="v">' + c.v + '</div><div class="s">' + c.s + '</div></div>').join('');
 
@@ -2012,44 +2306,155 @@ function renderCustos(){
     caixa('Quilometragem por veículo', 'quem mais rodou no período',
       barras(km.reduce((a,v) => { a[v.license_plate||'—'] = v.distance_driven_in_km; return a; }, {}),
         p => p, () => '#2f8f9e', v => num(v,1) + ' km')) +
+    caixa('Ocupação da jornada', '% do tempo de ' + JORNADA_H + ' h/dia com o motor ligado',
+      barras(oc.reduce((a,o) => {
+          const pl = (o.vehicle && o.vehicle.license_plate) || '—';
+          a[pl] = Math.round((o.total_engine_activity_in_minutes || 0) / (dias*JORNADA_H*60) * 1000)/10;
+          return a; }, {}),
+        p => p, k => '#3a4a9e', v => num(v,1) + '%')) +
     caixa('Desperdício por veículo', 'reais queimados parado com o motor ligado',
       barras(oc.reduce((a,o) => { a[(o.vehicle&&o.vehicle.license_plate)||'—'] = o.fuel_costs||0; return a; }, {}),
-        p => p, () => '#c8412f', v => reais(v)));
+        p => p, () => '#c8412f', v => reais(v))) +
+    caixa('Manutenção', 'situação na Cobli', manutencaoCaixa());
 
   const porPlaca = {};
-  km.forEach(v => porPlaca[v.license_plate] = {placa:v.license_plate, modelo:[v.brand,v.model].filter(Boolean).join(' '),
-    grupo:v.group || '', km:v.distance_driven_in_km || 0});
+  km.forEach(v => porPlaca[v.license_plate] = {placa:v.license_plate,
+    modelo:[v.brand,v.model].filter(Boolean).join(' '), grupo:v.group || '', km:v.distance_driven_in_km || 0});
   oc.forEach(o => { const pl = o.vehicle && o.vehicle.license_plate; if(!pl) return;
     porPlaca[pl] = Object.assign(porPlaca[pl] || {placa:pl, modelo:'', grupo:'', km:0}, {
       idle:o.total_idle_in_minutes||0, pct:o.percentage_idle, litros:o.fuel_consumption||0,
-      custo:o.fuel_costs||0, rodando:o.total_trip_duration_in_minutes||0}); });
+      custo:o.fuel_costs||0, rodando:o.total_trip_duration_in_minutes||0,
+      ligado:o.total_engine_activity_in_minutes||0}); });
 
   const linhas = Object.values(porPlaca).sort((a,b) => (b.km||0) - (a.km||0));
   $('custoTab').innerHTML = linhas.length ? '<table class="tbl"><thead><tr>' +
-    '<th>Veículo</th><th>Grupo</th><th>Rodou</th><th>Tempo rodando</th><th>Ocioso</th>' +
-    '<th>% ocioso</th><th>Combustível parado</th></tr></thead><tbody>' +
+    '<th>Veículo</th><th>Grupo</th><th>Rodou</th><th>Motor ligado</th><th>Rodando</th>' +
+    '<th>Ocioso</th><th>% da jornada</th><th>Combustível parado</th></tr></thead><tbody>' +
     linhas.map(v => '<tr><td><span class="pl">' + esc(v.placa) + '</span><br>' +
       '<span style="color:var(--slate);font-size:11.5px">' + esc(v.modelo||'') + '</span></td>' +
       '<td>' + esc(v.grupo||'—') + '</td>' +
       '<td>' + num(v.km,1) + ' km</td>' +
+      '<td>' + horas(v.ligado) + '</td>' +
       '<td>' + horas(v.rodando) + '</td>' +
       '<td>' + horas(v.idle) + '</td>' +
-      '<td>' + (v.pct != null ? num(v.pct,1) + '%' : '—') + '</td>' +
+      '<td>' + (v.ligado != null ? num(v.ligado/(dias*JORNADA_H*60)*100,1) + '%' : '—') + '</td>' +
       '<td>' + (v.custo ? reais(v.custo) : '—') + '</td></tr>').join('') + '</tbody></table>'
     : '<div class="carregando">Sem dados de uso no período.</div>';
+  animarBarras();
 }
 
-// A Cobli devolve manutenção em três baldes; esta frota pode nem usar o módulo.
-function manutencaoResumo(){
+function manutencaoCaixa(){
   const m = G.manutencao;
-  if(!m) return {n:'—', s: G.manutencao_erro ? 'não foi possível consultar' : 'sem dados', cls:''};
+  if(!m) return '<div class="carregando">' +
+    (G.manutencao_erro ? '⚠ ' + G.manutencao_erro : 'sem dados') + '</div>';
   const conta = o => o && typeof o === 'object' ? Object.keys(o).length : 0;
-  const atras = conta(m.delayed), prox = conta(m.warning), ok = conta(m.onTime);
-  if(!atras && !prox && !ok) return {n:'—', s:'módulo de manutenção não utilizado na Cobli', cls:''};
-  return {n: atras, s: atras ? 'atrasada(s) · ' + prox + ' próxima(s)' : prox + ' próxima(s) · ' + ok + ' em dia',
-    cls: atras ? 'alerta' : 'bom'};
+  const v = {atrasada: conta(m.delayed), proxima: conta(m.warning), 'em dia': conta(m.onTime)};
+  if(!v.atrasada && !v.proxima && !v['em dia'])
+    return '<div class="carregando">O módulo de manutenção da Cobli não está em uso nesta frota.</div>';
+  return barras(v, k => k, k => k === 'atrasada' ? '#c8412f' : k === 'proxima' ? '#e8963c' : '#7cb342');
 }
 
+/* ------------------------------------------------------------- itinerário */
+
+let MAPA_ITIN = null, GRUPO_ITIN = null;
+
+function prepararItinerario(){
+  const t = listaTrechos();
+  const placas = [...new Set(t.map(x => x.vehicle && x.vehicle.license_plate).filter(Boolean))].sort();
+  const dias = [...new Set(t.map(x => (x.start_address && x.start_address.date || '').slice(0,10))
+    .filter(Boolean))].sort().reverse();
+
+  if(!ITIN_VEIC || !placas.includes(ITIN_VEIC)) ITIN_VEIC = placas[0] || '';
+  if(!ITIN_DIA || !dias.includes(ITIN_DIA)) ITIN_DIA = dias[0] || '';
+
+  $('itinVeics').innerHTML = placas.map(p =>
+    '<button class="' + (p === ITIN_VEIC ? 'on' : '') + '" onclick="escolherItin(\'' + p + '\',null)">' +
+    p + '</button>').join('') || '<span class="fv-vazio">sem trechos no período</span>';
+  $('itinDias').innerHTML = dias.slice(0, 10).map(d =>
+    '<button class="' + (d === ITIN_DIA ? 'on' : '') + '" onclick="escolherItin(null,\'' + d + '\')">' +
+    d.slice(8) + '/' + d.slice(5,7) + '</button>').join('');
+
+  renderItinerario();
+}
+
+function escolherItin(placa, dia2){
+  if(placa) ITIN_VEIC = placa;
+  if(dia2) ITIN_DIA = dia2;
+  prepararItinerario();
+}
+
+function renderItinerario(){
+  const t = listaTrechos()
+    .filter(x => x.vehicle && x.vehicle.license_plate === ITIN_VEIC)
+    .filter(x => (x.start_address && x.start_address.date || '').slice(0,10) === ITIN_DIA)
+    .sort((a,b) => (a.start_address.date || '').localeCompare(b.start_address.date || ''));
+
+  const km = t.reduce((a,x) => a + (x.distance_in_meters || 0), 0) / 1000;
+  const motorista = (t.find(x => x.driver && x.driver.name) || {}).driver;
+  $('itinSub').textContent = t.length
+    ? ITIN_VEIC + ' · ' + ITIN_DIA.split('-').reverse().join('/') + ' · ' + t.length +
+      ' trecho(s) · ' + num(km,1) + ' km' + (motorista ? ' · ' + motorista.name : ' · motorista não identificado')
+    : 'sem trechos para este veículo neste dia';
+
+  $('itinLista').innerHTML = t.length ? t.map((x,i) => {
+    const s = x.start_address || {}, e = x.end_address || {};
+    const parado = x.duration_in_seconds && (x.distance_in_meters == null || x.distance_in_meters === 0);
+    const local = x.geofence_name || (e.latitude != null ? unidadeDe([e.latitude, e.longitude]) : '') || '—';
+    return '<div class="meta-row clic" onclick="focarTrecho(' + i + ')">' +
+      '<span class="who">' + (parado ? '⏸ parado' : '➔ deslocamento') +
+        '<small>' + hora(s.date) + ' → ' + hora(e.date) + ' · ' + esc(local) + '</small></span>' +
+      '<span class="pc">' + (parado ? horas((x.duration_in_seconds||0)/60)
+        : num((x.distance_in_meters||0)/1000, 1) + ' km') + '</span></div>';
+  }).join('') : '<div class="carregando">Nada registrado.</div>';
+
+  desenharItinerario(t);
+}
+
+const hora = d => d ? String(d).slice(11,16) : '--:--';
+
+function desenharItinerario(t){
+  if(typeof L === 'undefined') return;
+  if(!MAPA_ITIN){
+    MAPA_ITIN = L.map('itinMapa', {zoomControl:true});
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      {maxZoom:19, attribution:'Imagens © Esri'}).addTo(MAPA_ITIN);
+    GRUPO_ITIN = L.layerGroup().addTo(MAPA_ITIN);
+    MAPA_ITIN.setView(CENTRO, 13);
+  }
+  GRUPO_ITIN.clearLayers();
+  const pontos = [];
+  t.forEach((x, i) => {
+    const s = x.start_address || {}, e = x.end_address || {};
+    if(s.latitude == null) return;
+    const p1 = [s.latitude, s.longitude], p2 = [e.latitude, e.longitude];
+    pontos.push(p1); if(e.latitude != null) pontos.push(p2);
+    const mesmo = e.latitude === s.latitude && e.longitude === s.longitude;
+    if(!mesmo) L.polyline([p1, p2], {color:'#3a4a9e', weight:3, opacity:.75}).addTo(GRUPO_ITIN);
+    L.circleMarker(p1, {radius:7, color:'#fff', weight:2,
+      fillColor: mesmo ? '#e8963c' : '#7cb342', fillOpacity:1})
+      .bindPopup('<div class="pop"><h4>' + (mesmo ? 'Parada' : 'Partida') + ' ' + (i+1) + '</h4>' +
+        linha('Horário', hora(s.date) + ' → ' + hora(e.date)) +
+        linha('Local', esc(x.geofence_name || unidadeDe(p1) || '—')) +
+        (mesmo ? linha('Tempo parado', horas((x.duration_in_seconds||0)/60))
+               : linha('Distância', num((x.distance_in_meters||0)/1000,1) + ' km')) +
+        '</div>').addTo(GRUPO_ITIN);
+  });
+  // O mapa do itinerário também nasce numa aba escondida: só depois de se
+  // remedir é que o enquadramento sai certo.
+  setTimeout(() => {
+    MAPA_ITIN.invalidateSize();
+    if(pontos.length) MAPA_ITIN.fitBounds(L.latLngBounds(pontos).pad(.25), {maxZoom:16});
+  }, 80);
+}
+
+function focarTrecho(i){
+  const t = listaTrechos()
+    .filter(x => x.vehicle && x.vehicle.license_plate === ITIN_VEIC)
+    .filter(x => (x.start_address && x.start_address.date || '').slice(0,10) === ITIN_DIA)
+    .sort((a,b) => (a.start_address.date || '').localeCompare(b.start_address.date || ''));
+  const x = t[i]; if(!x || !x.start_address || x.start_address.latitude == null) return;
+  MAPA_ITIN.setView([x.start_address.latitude, x.start_address.longitude], 17);
+}
 
 /* Sem o proxy ligado não há o que consultar, mas a tela precisa mostrar
    o formato do que ela entrega. Estes números são inventados, e a faixa
@@ -2078,6 +2483,8 @@ function painelSimulado(){
     vehicle: { license_plate: pl, group: { name: SIM_GRUPOS[i % 3] } },
     total_idle_in_minutes: 40 + (i * 53) % 300,
     total_trip_duration_in_minutes: 600 + (i * 91) % 1400,
+    total_engine_activity_in_minutes: 640 + (i * 97) % 1600,
+    total_stopped_in_minutes: 2600 + (i * 131) % 2000,
     percentage_idle: 3 + (i * 7) % 14,
     fuel_consumption: 2 + (i * 3) % 11,
     fuel_costs: 18 + (i * 29) % 90
@@ -2090,8 +2497,47 @@ function painelSimulado(){
 
   G.multas = { content: [] };
   G.manutencao = { delayed: {}, warning: {}, onTime: {} };
+  G.tipos = Object.keys(DESVIO_NOME).map((k,i) => ({id:'t'+i, name: DESVIO_NOME[k],
+    name_identifier: k, enabled: true}));
 
-  renderGeral(); renderDesvios(); renderMotoristas(); renderCustos();
+  // série diária de quilometragem, no mesmo formato da Cobli
+  const porDia = {};
+  for(let i = 0; i < PERIODO; i++){
+    const d = new Date(agora - i*864e5); d.setHours(0,0,0,0);
+    const fds = d.getDay() === 0 || d.getDay() === 6;
+    porDia[d.getTime()] = { sum: fds ? 0 : 140000 + ((i*37) % 90) * 1200 };
+  }
+  G.viagens = { fleet_daily_distance_stats_in_meters: porDia };
+
+  // trechos do dia: sai da base, para em alguns pontos, volta
+  const locais = ['Pier 2','Oficina Central','Portaria Principal','Almoxarifado','ETE'];
+  G.trajetos = [];
+  for(let d2 = 0; d2 < Math.min(PERIODO, 10); d2++){
+    const base = new Date(agora - d2*864e5); base.setHours(7,10,0,0);
+    placas.slice(0,5).forEach((pl, vi) => {
+      let t0 = base.getTime() + vi*18*60e3;
+      for(let k = 0; k < 5; k++){
+        const anda = k % 2 === 0;
+        const dur = anda ? 900 + (k*vi*37)%1200 : 1200 + (k*vi*53)%2400;
+        const lat = CENTRO[0] + ((k+vi) % 5 - 2) * 0.004, lon = CENTRO[1] + ((k*vi) % 5 - 2) * 0.005;
+        G.trajetos.push({
+          device_id:'SIM'+vi,
+          vehicle: {license_plate: pl, group: SIM_GRUPOS[vi % 3]},
+          driver: {id: null, name: null},
+          start_address: {date: new Date(t0).toISOString().slice(0,19), latitude: lat, longitude: lon},
+          end_address: {date: new Date(t0 + dur*1000).toISOString().slice(0,19),
+            latitude: anda ? lat + 0.004 : lat, longitude: anda ? lon + 0.003 : lon},
+          distance_in_meters: anda ? 1800 + (k*vi*90)%4200 : 0,
+          duration_in_seconds: dur, fuel_cost: anda ? 4.2 : 0.8,
+          idle_time_duration: anda ? 60 : 300,
+          geofence_name: anda ? null : locais[(k+vi) % locais.length]
+        });
+        t0 += dur*1000 + 300000;
+      }
+    });
+  }
+
+  renderGeral(); renderDesvios(); renderMotoristas(); renderUso(); prepararItinerario();
 }
 
 /* ============================================================= boot */
