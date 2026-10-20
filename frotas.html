@@ -1218,6 +1218,7 @@ body{display:flex;flex-direction:column}
     <div class="sub" id="kmSerieSub">distância rodada pela frota</div>
     <div class="corpo2" id="kmSerie"></div></div>
   <div class="grade" id="custoGrade"></div>
+  <div id="usoDetalhe"></div>
   <div class="secao">Por veículo</div>
   <div class="caixa"><div class="rolavel" id="custoTab"></div></div>
 </div></section>
@@ -2224,7 +2225,74 @@ function passaTrecho(x){
 /* --------------------------------------------------------- as consultas */
 
 const JORNADA_H = 8.8;        // jornada considerada no cálculo de ocupação
+
+/* Quantos dias úteis o período tem. É esta a jornada que o contrato
+   paga, e é contra ela que a ocupação do veículo faz sentido.
+   Dividir pelos dias em que o carro se moveu — como era antes —
+   responde outra pergunta: um veículo parado a semana inteira
+   aparecia com ocupação alta justamente por ter rodado pouco. */
+function diasUteis(){
+  const p = periodoAtual();
+  const d = new Date(p.ini + 'T12:00:00'), fim = new Date(p.fim + 'T12:00:00');
+  let n = 0;
+  while(d <= fim){
+    const s = d.getDay();
+    if(s !== 0 && s !== 6) n++;
+    d.setDate(d.getDate() + 1);
+  }
+  return Math.max(1, n);
+}
+
+/* Em quantas fatias o período se divide, na escala escolhida — para o
+   cartão falar na mesma unidade do gráfico logo abaixo dele. Semana e
+   mês só contam quando têm pelo menos um dia útil dentro do período. */
+function fatias(passo){
+  if(passo === 'dia') return { n: diasUteis(), nome: 'por dia útil' };
+  const p = periodoAtual();
+  const d = new Date(p.ini + 'T12:00:00'), fim = new Date(p.fim + 'T12:00:00');
+  const chaves = new Set();
+  while(d <= fim){
+    const s = d.getDay();
+    if(s !== 0 && s !== 6){
+      if(passo === 'semana'){
+        const seg = new Date(d); seg.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+        chaves.add(dia(seg));
+      } else {
+        chaves.add(d.getFullYear() + '-' + d.getMonth());
+      }
+    }
+    d.setDate(d.getDate() + 1);
+  }
+  return { n: Math.max(1, chaves.size), nome: passo === 'semana' ? 'por semana' : 'por mês' };
+}
+
+/* Quem esteve ao volante de um veículo no período.
+   Vem de /public/v1/driver-vehicle-association, que é o único lugar
+   desta frota onde o condutor aparece com nome — os trechos devolvem
+   motorista nulo porque a identificação não está ativa neles. */
+function condutoresDe(placa){
+  const base = Array.isArray(G.condutores) ? G.condutores
+             : ((G.condutores && (G.condutores.data || G.condutores.content)) || []);
+  const fora = {};
+  base.forEach(a => {
+    const pl = a.vehicle && String(a.vehicle.license_plate || '').trim();
+    if(placa && pl !== placa) return;
+    const nome = a.driver && a.driver.name;
+    if(!nome) return;
+    const alvo = fora[nome] || (fora[nome] =
+      {nome: nome, vezes: 0, minutos: 0, primeiro: '', ultimo: '', metodo: ''});
+    alvo.vezes++;
+    alvo.minutos += Number(a.association_duration) || 0;
+    const i = a.start_association_date || '';
+    const f = a.end_association_date || a.last_activity_date || '';
+    if(i && (!alvo.primeiro || i < alvo.primeiro)) alvo.primeiro = i;
+    if(f && (!alvo.ultimo || f > alvo.ultimo)) alvo.ultimo = f;
+    if(a.identification_method) alvo.metodo = a.identification_method;
+  });
+  return Object.values(fora).sort((a, b) => b.minutos - a.minutos || b.vezes - a.vezes);
+}
 let PASSO_KM = 'dia', PASSO_DESVIO = 'dia', VEIC_FOCO = '', ITIN_VEIC = '', ITIN_DIA = '';
+let VEIC_USO = '';            // veículo aberto na aba de uso e custos
 
 /* Os endpoints /herbie-1.1/stats/* não aceitam data em ISO: querem o
    instante em milissegundos. Os demais querem o dia. Por isso há duas
@@ -2255,6 +2323,7 @@ async function carregarGestao(){
     pedir('tipos', 'tipos-alerta'),
     pedir('motoristas', 'motoristas'),
     pedir('cadastro', 'veiculos'),
+    pedir('condutores', 'condutores-do-veiculo', {inicio: ini, fim: fim}),
     pedir('midias', 'midias', {inicio: ini, fim: fim, limite: 500}),
     carregarTrajetos(ini, fim)
   ]);
@@ -2321,14 +2390,6 @@ function serieDiaria(obj){
 function kmPorDia(){
   const v = G.viagens;
   return v ? serieDiaria(v.fleet_daily_distance_stats_in_meters) : {};
-}
-
-// Quantos dias do período realmente tiveram movimento — é sobre eles que
-// a jornada de 8,8 h faz sentido, não sobre domingos parados.
-function diasComMovimento(){
-  const d = kmPorDia();
-  const n = Object.values(d).filter(v => v > 0).length;
-  return Math.max(1, n);
 }
 
 /* ------------------------------------------------------------ visão geral */
@@ -2603,10 +2664,10 @@ function renderDetalheVeiculo(){
   const porMot = {}, semMot = d.filter(x => !(x.driver && x.driver.name)).length;
   d.forEach(x => { const n = x.driver && x.driver.name; if(n) porMot[n] = (porMot[n]||0) + 1; });
 
-  const trechos = listaTrechos().filter(t => t.vehicle && t.vehicle.license_plate === VEIC_FOCO);
+  // Os trechos vêm sem condutor nesta frota; a associação motorista-
+  // veículo traz. Preferir a que tem dado.
   const condutores = {};
-  trechos.forEach(t => { const n = t.driver && t.driver.name;
-    if(n) condutores[n] = (condutores[n] || 0) + 1; });
+  condutoresDe(VEIC_FOCO).forEach(c => condutores[c.nome] = c.minutos);
 
   const porTipo = {}; d.forEach(x => porTipo[x.event_type] = (porTipo[x.event_type]||0) + 1);
 
@@ -2621,9 +2682,9 @@ function renderDetalheVeiculo(){
       Object.keys(porMot).length ? barras(porMot, n => n, () => '#6b5b95')
         : '<div class="carregando">A Cobli não identificou o motorista nestas ocorrências.<br>' +
           'Depende da identificação por crachá ou aplicativo estar ativa na frota.</div>') +
-    caixa('Quem dirigiu', 'trechos registrados com condutor',
-      Object.keys(condutores).length ? barras(condutores, n => n, () => '#2f8f9e', v => v + ' trecho(s)')
-        : '<div class="carregando">Nenhum trecho deste veículo trouxe o condutor.</div>') +
+    caixa('Quem dirigiu', 'tempo ao volante no período',
+      Object.keys(condutores).length ? barras(condutores, n => n, () => '#2f8f9e', v => horas(v))
+        : '<div class="carregando">A Cobli não registrou condutor para este veículo no período.</div>') +
     '</div>';
   animarBarras();
 }
@@ -3017,43 +3078,53 @@ function renderUso(){
   const rodando = somaOcioso('total_trip_duration_in_minutes');
   const ligado = somaOcioso('total_engine_activity_in_minutes');
   const parado = somaOcioso('total_stopped_in_minutes');
-  const dias = diasComMovimento();
-  const jornada = dias * JORNADA_H * 60 * Math.max(1, km.length);   // minutos de jornada da frota
+  const uteis = diasUteis();
+  const fat = fatias(PASSO_KM);
+  const jornadaVeic = uteis * JORNADA_H * 60;                       // minutos por veículo
+  const jornada = jornadaVeic * Math.max(1, km.length);             // minutos da frota
+  const porFatia = v => v / fat.n;
 
   $('passoKm').innerHTML = passos('passoKm', PASSO_KM, 'trocarPassoKm');
   $('custoSub').textContent = rotuloFiltro() + ' · ' + km.length +
-    ' veículo(s) com registro · ' + dias + ' dia(s) com movimento';
+    ' veículo(s) com registro · ' + uteis + ' dia(s) útil(eis) de jornada';
 
   const serie = agrupar(kmPorDia(), PASSO_KM);
   $('kmSerie').innerHTML = colunas(serie, v => num(v/1000, 0), '#2f8f9e');
   $('kmSerieSub').textContent = 'quilômetros rodados pela frota, ' +
     (PASSO_KM === 'dia' ? 'dia a dia' : PASSO_KM === 'semana' ? 'por semana' : 'por mês');
 
+  // Os cartões falam na escala escolhida embaixo; o total do período
+  // fica no rodapé para não sumir de vista.
+  const noPeriodo = v => horas(v) + ' no período';
   $('custoKpis').innerHTML = [
-    {r:'Motor ligado', v: horas(ligado),
-      s: jornada ? num(ligado / jornada * 100, 1) + '% da jornada de ' + JORNADA_H + ' h' : ''},
-    {r:'Rodando', v: horas(rodando),
+    {r:'Motor ligado ' + fat.nome, v: horas(porFatia(ligado)),
+      s: jornada ? num(ligado / jornada * 100, 1) + '% da jornada · ' + noPeriodo(ligado) : ''},
+    {r:'Rodando ' + fat.nome, v: horas(porFatia(rodando)),
       s: ligado ? num(rodando / ligado * 100, 1) + '% do motor ligado' : ''},
-    {r:'Parado com motor ligado', v: horas(idle),
-      s: jornada ? num(idle / jornada * 100, 1) + '% da jornada' : '',
+    {r:'Parado com motor ligado', v: horas(porFatia(idle)),
+      s: jornada ? num(idle / jornada * 100, 1) + '% da jornada · ' + noPeriodo(idle) : '',
       cls: idle > rodando * .3 ? 'alerta' : ''},
-    {r:'Parado e desligado', v: horas(parado), s:'veículo à disposição'},
-    {r:'Distância total', v: num(totalKm) + ' km', s:'somando toda a frota'},
+    {r:'Parado e desligado', v: horas(porFatia(parado)), s:'veículo à disposição'},
+    {r:'Distância ' + fat.nome, v: num(porFatia(totalKm)) + ' km',
+      s: num(totalKm) + ' km no período'},
     {r:'Combustível desperdiçado', v: num(litros, 1) + ' L', s: reais(custo) + ' com o motor parado',
       cls: custo > 0 ? 'alerta' : ''}
   ].map(c => '<div class="kpi ' + (c.cls||'') + '"><div class="r">' + c.r + '</div>' +
     '<div class="v">' + c.v + '</div><div class="s">' + c.s + '</div></div>').join('');
 
   $('custoGrade').innerHTML =
-    caixa('Quilometragem por veículo', 'quem mais rodou no período',
+    caixa('Quilometragem por veículo', 'clique para ver quem dirigiu',
       barras(km.reduce((a,v) => { a[v.license_plate||'—'] = v.distance_driven_in_km; return a; }, {}),
-        p => p, () => '#2f8f9e', v => num(v,1) + ' km')) +
-    caixa('Ocupação da jornada', '% do tempo de ' + JORNADA_H + ' h/dia com o motor ligado',
+        p => p, () => '#2f8f9e', v => num(v,1) + ' km',
+        p => "abrirUso('" + p + "')")) +
+    caixa('Ocupação da jornada',
+      '% de ' + uteis + ' dia(s) útil(eis) × ' + JORNADA_H + ' h com o motor ligado',
       barras(oc.reduce((a,o) => {
           const pl = (o.vehicle && o.vehicle.license_plate) || '—';
-          a[pl] = Math.round((o.total_engine_activity_in_minutes || 0) / (dias*JORNADA_H*60) * 1000)/10;
+          a[pl] = Math.round((o.total_engine_activity_in_minutes || 0) / jornadaVeic * 1000)/10;
           return a; }, {}),
-        p => p, k => '#3a4a9e', v => num(v,1) + '%')) +
+        p => p, k => '#3a4a9e', v => num(v,1) + '%',
+        p => "abrirUso('" + p + "')")) +
     caixa('Desperdício por veículo', 'reais queimados parado com o motor ligado',
       barras(oc.reduce((a,o) => { a[(o.vehicle&&o.vehicle.license_plate)||'—'] = o.fuel_costs||0; return a; }, {}),
         p => p, () => '#c8412f', v => reais(v))) +
@@ -3072,16 +3143,68 @@ function renderUso(){
   $('custoTab').innerHTML = linhas.length ? '<table class="tbl"><thead><tr>' +
     '<th>Veículo</th><th>Grupo</th><th>Rodou</th><th>Motor ligado</th><th>Rodando</th>' +
     '<th>Ocioso</th><th>% da jornada</th><th>Combustível parado</th></tr></thead><tbody>' +
-    linhas.map(v => '<tr><td><span class="pl">' + esc(v.placa) + '</span><br>' +
+    linhas.map(v => '<tr class="clic" title="ver quem dirigiu este veículo" ' +
+      'onclick="abrirUso(\'' + esc(v.placa) + '\')"><td><span class="pl">' + esc(v.placa) + '</span><br>' +
       '<span style="color:var(--slate);font-size:11.5px">' + esc(v.modelo||'') + '</span></td>' +
       '<td>' + esc(v.grupo||'—') + '</td>' +
       '<td>' + num(v.km,1) + ' km</td>' +
       '<td>' + horas(v.ligado) + '</td>' +
       '<td>' + horas(v.rodando) + '</td>' +
       '<td>' + horas(v.idle) + '</td>' +
-      '<td>' + (v.ligado != null ? num(v.ligado/(dias*JORNADA_H*60)*100,1) + '%' : '—') + '</td>' +
+      '<td>' + (v.ligado != null ? num(v.ligado/jornadaVeic*100,1) + '%' : '—') + '</td>' +
       '<td>' + (v.custo ? reais(v.custo) : '—') + '</td></tr>').join('') + '</tbody></table>'
     : '<div class="carregando">Sem dados de uso no período.</div>';
+  renderDetalheUso();
+  animarBarras();
+}
+
+function abrirUso(placa){
+  VEIC_USO = (VEIC_USO === placa) ? '' : placa;
+  renderDetalheUso();
+  if(VEIC_USO) $('usoDetalhe').scrollIntoView({behavior:'smooth', block:'center'});
+}
+
+/* Quem dirigiu este veículo no período. É a estratificação que faltava:
+   um carro com desvio ou com ocupação fora da curva quase nunca tem um
+   dono só, e sem isto a conversa vira cobrança no veículo errado. */
+function renderDetalheUso(){
+  const el = $('usoDetalhe'); if(!el) return;
+  if(!VEIC_USO){ el.innerHTML = ''; return; }
+
+  const cond = condutoresDe(VEIC_USO);
+  const d = listaDesvios().filter(x => (x.vehicle||{}).license_plate === VEIC_USO);
+  const porMotDesvio = {};
+  d.forEach(x => { const nm = (x.driver||{}).name; if(nm) porMotDesvio[nm] = (porMotDesvio[nm]||0)+1; });
+
+  const totalMin = cond.reduce((s, c) => s + c.minutos, 0);
+  const tabela = cond.length ? '<table class="tbl"><thead><tr>' +
+    '<th>Motorista</th><th>Ao volante</th><th>Vezes</th><th>Primeira</th><th>Última</th>' +
+    '<th>Identificação</th></tr></thead><tbody>' +
+    cond.map(c => '<tr><td><b>' + esc(c.nome) + '</b></td>' +
+      '<td>' + horas(c.minutos) + (totalMin ? ' · ' + num(c.minutos/totalMin*100,0) + '%' : '') + '</td>' +
+      '<td>' + num(c.vezes) + '</td>' +
+      '<td>' + esc(quando(c.primeiro)) + '</td>' +
+      '<td>' + esc(quando(c.ultimo)) + '</td>' +
+      '<td>' + esc((c.metodo || '—').toLowerCase()) + '</td></tr>').join('') +
+    '</tbody></table>'
+    : '<div class="carregando">A Cobli não registrou condutor para este veículo no período. ' +
+      'Depende da identificação por crachá ou aplicativo estar ativa.</div>';
+
+  el.innerHTML = '<div class="secao">' + esc(VEIC_USO) + ' · quem dirigiu' +
+    '<button class="bt" style="margin-left:auto;box-shadow:none;background:var(--line2)" ' +
+    'onclick="abrirUso(\'\')">fechar</button></div>' +
+    '<div class="grade">' +
+    caixa('Tempo ao volante', cond.length === 1
+        ? 'um único motorista no período'
+        : cond.length + ' motorista(s) se revezaram neste veículo',
+      cond.length ? barras(cond.reduce((a,c) => { a[c.nome] = c.minutos; return a; }, {}),
+        n => n, () => '#2f8f9e', v => horas(v)) : '<div class="carregando">Sem registro.</div>') +
+    caixa('Desvios por motorista', d.length + ' ocorrência(s) deste veículo',
+      Object.keys(porMotDesvio).length
+        ? barras(porMotDesvio, n => n, () => '#6b5b95')
+        : '<div class="carregando">Nenhuma ocorrência trouxe o motorista.</div>') +
+    '</div>' +
+    '<div class="caixa" style="margin-top:13px"><div class="rolavel">' + tabela + '</div></div>';
   animarBarras();
 }
 
@@ -3283,6 +3406,27 @@ function painelSimulado(){
 
   G.motoristas = { data: SIM_NOMES.filter(Boolean).map((nm, i) => ({id: 'd' + i, name: nm})) };
   G.cadastro = { data: placas.map((pl, i) => ({ id: 'v' + i, license_plate: pl })) };
+
+  // associação motorista-veículo, no formato que a Cobli devolve:
+  // alguns carros com um motorista só, outros com revezamento
+  G.condutores = [];
+  placas.forEach((pl, i) => {
+    const quantos = 1 + (i % 3);
+    for(let k = 0; k < quantos; k++){
+      const nm = SIM_NOMES[(i + k * 3) % SIM_NOMES.length] || 'Motorista ' + (k + 1);
+      for(let v = 0; v < 2 + k; v++){
+        const t0 = agora - ((i + k + v) * 29 + 5) * 36e5;
+        G.condutores.push({
+          association_duration: 45 + ((i + k + v) * 37) % 300,
+          driver: { id: 'd' + ((i + k * 3) % SIM_NOMES.length), name: nm },
+          vehicle: { license_plate: pl, group: { name: SIM_GRUPOS[i % 3] } },
+          identification_method: k % 2 ? 'PAINEL ou APP' : 'CRACHA',
+          start_association_date: new Date(t0).toISOString().slice(0,19),
+          end_association_date: new Date(t0 + 2*36e5).toISOString().slice(0,19)
+        });
+      }
+    }
+  });
 
   // As gravações nascem dos próprios desvios — um a cada três é filmado.
   // Assim a demonstração mostra o botão de vídeo na linha certa, que é
