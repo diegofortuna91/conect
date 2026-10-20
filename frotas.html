@@ -2132,6 +2132,7 @@ function montarFiltros(){
   const unidades = new Set(AREAS.map(a => a.nome).filter(Boolean));
   const grupos = new Set();
   VEICULOS.forEach(v => { const g = grupoDe(v); if(g) grupos.add(g); });
+  ((G.cadastro && G.cadastro.data) || []).forEach(v => { const g = grupoDe(v); if(g) grupos.add(g); });
   trechos.forEach(x => { const g = grupoDe(x.vehicle); if(g) grupos.add(g); });
 
   opcoes('fgVeiculo', 'todos os veículos',
@@ -2231,7 +2232,7 @@ async function carregarGestao(){
     pedir('tipos', 'tipos-alerta'),
     pedir('motoristas', 'motoristas'),
     pedir('cadastro', 'veiculos'),
-    pedir('midias', 'midias', {inicio: ini, fim: fim, limite: 200}),
+    pedir('midias', 'midias', {inicio: ini, fim: fim, limite: 500}),
     carregarTrajetos(ini, fim)
   ]);
 
@@ -2610,9 +2611,12 @@ function listaMidias(){
 /* A mídia identifica veículo e motorista por UUID. Estas duas tabelas
    traduzem para placa e nome — sem elas a tela mostraria identificador
    de banco de dados para quem quer ler uma placa. */
+function veiculoDoId(id){
+  return id ? ((G.cadastro && G.cadastro.data) || []).find(x => x.id === id) : null;
+}
 function placaDoId(id){
-  if(!id) return '';
-  const v = ((G.cadastro && G.cadastro.data) || []).find(x => x.id === id);
+  const v = veiculoDoId(id);
+  // O cadastro às vezes devolve a placa com espaço no fim.
   return v ? String(v.license_plate || '').trim() : '';
 }
 function nomeDoId(id){
@@ -2636,7 +2640,7 @@ function normMidia(m){
     placa:     placaDoId(m.vehicle_id),
     motorista: nomeDoId(m.driver_id),
     aparelho:  m.device_id || '',
-    grupo:     '',
+    grupo:     grupoDe(veiculoDoId(m.vehicle_id)),
     miniatura: d.thumbnail_url || '',
     pos:       (d.latitude != null && d.longitude != null) ? [d.latitude, d.longitude] : null,
     visto:     m.media_status === 'WATCHED',
@@ -2736,11 +2740,15 @@ async function abrirMidia(id, titulo){
 
   try{
     const j = await buscar('midia', {id: id});
-    const url = j.url || j.link || j.temporary_url || j.temporaryUrl ||
-                j.media_url || j.mediaUrl || (j.data && (j.data.url || j.data.link)) || '';
+    const d = j.data || j;
+    const url = d.media_url || d.url || d.link || d.temporary_url || '';
     if(!url) throw new Error('A Cobli não devolveu o endereço do vídeo.');
     $('vCorpo').innerHTML = '<video controls autoplay playsinline src="' + esc(url) + '"></video>';
     const a = $('vAba'); a.href = url; a.style.display = 'inline';
+    // O endereço expira; dizer quando evita a sensação de que quebrou.
+    if(d.expiration_date)
+      $('vTitulo').textContent = (titulo || 'gravação') + ' · link vale até ' +
+        String(d.expiration_date).slice(11, 16);
   }catch(e){
     $('vCorpo').innerHTML = '<div class="vaviso">Não foi possível abrir: ' + esc(e.message) +
       '<br><span style="color:#8b94ad;font-size:12px">O link da Cobli vale 5 minutos; ' +
