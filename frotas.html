@@ -973,6 +973,29 @@ body{display:flex;flex-direction:column}
 .mid .txt span{display:block;font-size:11px;color:var(--slate);margin-top:2px}
 .mid .txt .pl{font-weight:800;letter-spacing:.02em;color:var(--ink)}
 
+/* ------------------------------------------------------- ficha do desvio */
+.ficha{max-width:760px;background:#fff;border-radius:12px;overflow:hidden;width:100%;
+  box-shadow:0 20px 60px rgba(0,0,0,.4);max-height:90vh;display:flex;flex-direction:column}
+.ficha .fcab{display:flex;align-items:center;gap:11px;padding:13px 16px;background:var(--navy);color:#fff}
+.ficha .fcab .tit{font-size:15px;font-weight:800}
+.ficha .fcab .sub{font-size:11.5px;color:#9fc0d4;margin-top:1px}
+.ficha .fcab .esp{flex:1}
+.ficha .fcab button{border:0;background:rgba(255,255,255,.14);color:#fff;border-radius:7px;
+  padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer}
+.ficha .fcab button:hover{background:rgba(255,255,255,.24)}
+.ficha .fcorpo{padding:16px;overflow:auto}
+.ficha video{width:100%;border-radius:9px;background:#000;display:block;margin-bottom:14px;max-height:46vh}
+.ficha .semvideo{background:var(--line2);border-radius:9px;padding:20px;text-align:center;
+  color:var(--slate2);font-size:12.5px;margin-bottom:14px}
+.fgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:11px;margin-bottom:15px}
+.fdado{background:var(--bg);border:1px solid var(--line2);border-radius:9px;padding:9px 11px}
+.fdado .r{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--slate2)}
+.fdado .v{font-size:14px;font-weight:700;margin-top:2px;line-height:1.3}
+.facoes{display:flex;gap:7px;flex-wrap:wrap}
+.facoes button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:7px 12px;
+  font-size:12px;font-weight:700;color:var(--navy);cursor:pointer}
+.facoes button:hover{background:#eaeefa;border-color:var(--navy3)}
+
 .verv{border:1px solid var(--line);background:#fff;border-radius:6px;padding:2px 8px;font-size:11px;
   font-weight:700;color:var(--navy);cursor:pointer;white-space:nowrap}
 .verv:hover{background:#eaeefa;border-color:var(--navy3)}
@@ -2481,23 +2504,28 @@ function renderDesvios(){
   d.forEach(x => { const n = (x.driver && x.driver.name) || 'sem motorista identificado';
     porMot[n] = (porMot[n] || 0) + 1; });
 
+  // Toda barra daqui é uma porta: clicar aplica aquele recorte à tela
+  // inteira, que é o que "estratificar" quer dizer na prática.
   $('desviosGrade').innerHTML =
-    caixa('Por tipo', 'natureza da ocorrência',
-      barras(porTipo, t => DESVIO_NOME[t] || t.toLowerCase().replace(/_/g,' '), DESVIO_COR)) +
-    caixa('Por veículo', 'clique para ver quem dirigiu',
+    caixa('Por tipo', 'clique para filtrar a tela por este desvio',
+      barras(porTipo, t => DESVIO_NOME[t] || t.toLowerCase().replace(/_/g,' '), DESVIO_COR,
+        null, k => "recortar('tipo','" + k.replace(/'/g, "") + "')")) +
+    caixa('Por veículo', 'clique para ver quem dirigiu e filtrar a tela',
       barras(porVeic, p => p, () => '#3a4a9e', null, p => "focarVeiculo('" + p + "')")) +
-    caixa('Por motorista', 'quem acumulou mais ocorrências',
-      barras(porMot, n => n, () => '#6b5b95')) +
+    caixa('Por motorista', 'clique para filtrar a tela por este motorista',
+      barras(porMot, n => n, () => '#6b5b95',
+        null, k => "recortar('motorista',\"" + k.replace(/"/g, '') + "\")")) +
     caixa('O que a Cobli pode detectar', 'tipos configurados nesta frota', catalogoDesvios(porTipo));
   renderDetalheVeiculo();
 
   const linhas = d.slice().sort((a,b) => (b.event_time||'').localeCompare(a.event_time||'')).slice(0, 300);
+  G.naTela = linhas;          // a ficha precisa achar de volta a ocorrência clicada
   $('desviosTab').innerHTML = linhas.length ? '<table class="tbl"><thead><tr>' +
     '<th>Quando</th><th>Ocorrência</th><th>Veículo</th><th>Motorista</th><th>Unidade</th>' +
     '<th>Câmera</th></tr></thead><tbody>' +
-    linhas.map(x => {
+    linhas.map((x, i) => {
       const pos = x.location ? [x.location.latitude, x.location.longitude] : null;
-      return '<tr class="clic" onclick="verNoMapa(' + (pos ? pos[0] + ',' + pos[1] : '') + ')">' +
+      return '<tr class="clic" title="abrir a ficha desta ocorrência" onclick="abrirDesvio(' + i + ')">' +
       '<td>' + esc(quando(x.event_time)) + '</td>' +
       '<td><span class="marca" style="background:' + DESVIO_COR(x.event_type) + '">' +
         esc(DESVIO_NOME[x.event_type] || x.event_type) + '</span></td>' +
@@ -2542,6 +2570,12 @@ function focarVeiculo(placa){
   VEIC_FOCO = (VEIC_FOCO === placa) ? '' : placa;
   renderDetalheVeiculo();
   if(VEIC_FOCO) $('desvioDetalhe').scrollIntoView({behavior:'smooth', block:'center'});
+}
+
+/* Clicar numa barra aplica o recorte; clicar de novo no mesmo tira.
+   Assim a mesma barra serve para entrar e para voltar. */
+function recortar(campo, valor){
+  mudarRecorte(campo, RECORTE[campo] === valor ? '' : valor);
 }
 
 function renderDetalheVeiculo(){
@@ -2724,9 +2758,21 @@ function cartaoMidia(m){
 
 /* O link só é pedido quando a pessoa clica, porque ele expira em 5
    minutos. Se a Cobli recusar, a tela diz o motivo dela. */
+let QUADRO_ORIGINAL = '';
+
+/* O quadro serve a dois conteúdos — o vídeo sozinho e a ficha da
+   ocorrência. Guardar o desenho original deixa alternar entre os dois
+   sem sobras de um dentro do outro. */
+function quadroLimpo(){
+  const mod = $('vmodal');
+  if(!QUADRO_ORIGINAL) QUADRO_ORIGINAL = mod.innerHTML;
+  else mod.innerHTML = QUADRO_ORIGINAL;
+  return mod;
+}
+
 async function abrirMidia(id, titulo){
   if(!id) return;
-  const mod = $('vmodal');
+  const mod = quadroLimpo();
   $('vTitulo').textContent = titulo || 'gravação';
   $('vAba').style.display = 'none';
   $('vCorpo').innerHTML = '<div class="vaviso">pedindo o link à Cobli…</div>';
@@ -2757,9 +2803,11 @@ async function abrirMidia(id, titulo){
 }
 
 function fecharMidia(){
-  const v = $('vCorpo').querySelector('video');
-  if(v){ v.pause(); v.removeAttribute('src'); v.load(); }   // para o download continuar parado
-  $('vmodal').classList.remove('on');
+  const mod = $('vmodal');
+  // Parar o vídeo não é detalhe: sem isso ele segue baixando escondido.
+  mod.querySelectorAll('video').forEach(v => { v.pause(); v.removeAttribute('src'); v.load(); });
+  mod.classList.remove('on');
+  if(QUADRO_ORIGINAL) mod.innerHTML = QUADRO_ORIGINAL;
 }
 
 document.addEventListener('keydown', e => {
@@ -2783,6 +2831,89 @@ function midiaDoDesvio(x){
     if(d < melhor){ melhor = d; achada = m; }
   });
   return achada;
+}
+
+/* =====================================================================
+   A FICHA DA OCORRÊNCIA
+
+   O que um coordenador precisa para tratar um desvio: o que foi, com
+   quem, onde, e se aquilo é um caso isolado ou um hábito. Os dois
+   últimos números são o que transforma a ficha em conversa com o
+   motorista em vez de bronca solta.
+   ===================================================================== */
+function abrirDesvio(i){
+  const x = (G.naTela || [])[i];
+  if(!x) return;
+  quadroLimpo();                 // garante o desenho guardado antes de trocar
+  const placa = (x.vehicle && x.vehicle.license_plate) || '';
+  const mot = (x.driver && x.driver.name) || '';
+  const pos = x.location ? [x.location.latitude, x.location.longitude] : null;
+  const nome = DESVIO_NOME[x.event_type] || x.event_type;
+  const todos = listaDesvios();
+  const noVeiculo = todos.filter(y => (y.vehicle && y.vehicle.license_plate) === placa).length;
+  const doTipo = todos.filter(y => y.event_type === x.event_type).length;
+  const doMotorista = mot ? todos.filter(y => (y.driver && y.driver.name) === mot).length : 0;
+  const mid = midiaDoDesvio(x);
+
+  const dado = (r, v) => '<div class="fdado"><div class="r">' + r + '</div>' +
+    '<div class="v">' + esc(v || '—') + '</div></div>';
+
+  $('vmodal').classList.add('on');
+  $('vmodal').innerHTML =
+    '<div class="ficha" onclick="event.stopPropagation()">' +
+      '<div class="fcab"><div>' +
+        '<div class="tit">' + esc(nome) + '</div>' +
+        '<div class="sub">' + esc(quando(x.event_time)) + ' · ' + esc(placa || 'veículo não informado') + '</div>' +
+      '</div><div class="esp"></div>' +
+      '<button onclick="fecharMidia()">fechar</button></div>' +
+      '<div class="fcorpo">' +
+        '<div id="fichaVideo">' + (mid
+          ? '<div class="semvideo">carregando a gravação…</div>'
+          : '<div class="semvideo">Sem gravação de câmera para esta ocorrência.<br>' +
+            '<span style="font-size:11.5px">Só três dos veículos da frota têm câmera.</span></div>') +
+        '</div>' +
+        '<div class="fgrid">' +
+          dado('Motorista', mot || 'não identificado') +
+          dado('Unidade', pos ? (unidadeDe(pos) || 'fora das áreas mapeadas') : '') +
+          dado('Neste veículo', noVeiculo + ' desvio(s) no período') +
+          dado('Deste tipo na frota', doTipo + ' no período') +
+          (mot ? dado('Deste motorista', doMotorista + ' no período') : '') +
+          (mid && mid.gravidade ? dado('Gravidade', GRAV_NOME[mid.gravidade] || mid.gravidade) : '') +
+        '</div>' +
+        '<div class="facoes">' +
+          (pos ? '<button onclick="fecharMidia();verNoMapa(' + pos[0] + ',' + pos[1] + ')">ver no mapa</button>' : '') +
+          (placa ? '<button onclick="fecharMidia();mudarRecorte(\'veiculo\',\'' + esc(placa) + '\')">' +
+            'filtrar por ' + esc(placa) + '</button>' : '') +
+          (mot ? '<button onclick="fecharMidia();mudarRecorte(\'motorista\',\"' + esc(mot) + '\")">' +
+            'filtrar por este motorista</button>' : '') +
+          '<button onclick="fecharMidia();mudarRecorte(\'tipo\',\'' + esc(x.event_type) + '\')">' +
+            'só ocorrências deste tipo</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+
+  if(mid) carregarVideoNaFicha(mid.id);
+}
+
+/* O vídeo entra depois que a ficha já está na tela: o link da Cobli
+   leva um instante e vale 5 minutos, então é pedido agora e não antes. */
+async function carregarVideoNaFicha(id){
+  const alvo = $('fichaVideo'); if(!alvo) return;
+  if(SIMULANDO){
+    alvo.innerHTML = '<div class="semvideo">Modo de demonstração — não há vídeo real para tocar.</div>';
+    return;
+  }
+  try{
+    const j = await buscar('midia', {id: id});
+    const d = j.data || j;
+    const url = d.media_url || d.url || '';
+    if(!url) throw new Error('a Cobli não devolveu o endereço');
+    if($('fichaVideo') !== alvo) return;        // a ficha já foi fechada
+    alvo.innerHTML = '<video controls playsinline src="' + esc(url) + '"></video>';
+  }catch(e){
+    alvo.innerHTML = '<div class="semvideo">Não foi possível carregar a gravação: ' +
+      esc(e.message) + '</div>';
+  }
 }
 
 function verNoMapa(lat, lon){
