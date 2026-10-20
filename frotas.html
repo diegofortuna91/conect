@@ -859,7 +859,12 @@ body{display:flex;flex-direction:column}
 .legenda .l i{width:10px;height:10px;border-radius:50%;display:block}
 
 /* --------------------------------------------------------- marcador */
-.fv{display:block}
+/* O Leaflet dá ao divIcon um quadro branco com borda e tamanho fixo.
+   Para a placa, esse quadro ficava menor que o texto e aparecia por
+   baixo dele. Aqui o quadro é apagado e o conteúdo fica centralizado,
+   livre para ter a largura do que escreve. */
+.fv,.fvp,.fvt,.lbl-un,.lbl-frota{background:none;border:0;display:flex;
+  align-items:center;justify-content:center}
 .fv svg{display:block;filter:drop-shadow(0 1px 3px rgba(28,35,51,.45))}
 .fv.sel svg{filter:drop-shadow(0 0 0 2px #fff) drop-shadow(0 2px 7px rgba(28,35,51,.6))}
 /* mesma etiqueta do mapa de áreas do SMS: fundo claro, texto escuro */
@@ -2137,11 +2142,20 @@ function catalogoDesvios(ocorridos){
   const cat = Array.isArray(G.tipos) ? G.tipos.filter(t => t.enabled) : [];
   if(!cat.length) return '<div class="carregando">' +
     (G.tipos_erro ? '⚠ ' + G.tipos_erro : 'A Cobli não devolveu o catálogo.') + '</div>';
-  return '<div class="fv-tags" style="gap:6px">' + cat.map(t => {
-    const n = ocorridos[t.name_identifier] || 0;
-    return '<b style="background:' + (n ? DESVIO_COR(t.name_identifier) : '#c9cfdd') + '" ' +
-      'title="' + esc(t.name_identifier) + '">' + esc(t.name) + (n ? ' · ' + n : '') + '</b>';
-  }).join('') + '</div>';
+  const max = Math.max(1, ...cat.map(t => ocorridos[t.name_identifier] || 0));
+  // Ordena pelos que aconteceram; os que não aconteceram ficam no fim,
+  // porque saber que existem e estão zerados também é informação.
+  return cat.slice()
+    .sort((a,b) => (ocorridos[b.name_identifier]||0) - (ocorridos[a.name_identifier]||0))
+    .map(t => {
+      const n = ocorridos[t.name_identifier] || 0;
+      return '<div class="meta-row"><span class="who" title="' + esc(t.name_identifier) + '">' +
+        esc(t.name) + '</span>' +
+        '<span class="bar-track"><i class="bar-fill" data-w="' + (n ? Math.max(3,(n/max)*100) : 0) +
+          '" style="background:' + (n ? DESVIO_COR(t.name_identifier) : 'transparent') + '"></i></span>' +
+        '<span class="pc" style="' + (n ? '' : 'color:var(--slate2)') + '">' +
+          (n ? num(n) : 'nenhum') + '</span></div>';
+    }).join('');
 }
 
 /* Estratificar um veículo: quem esteve ao volante no período e quantos
