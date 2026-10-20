@@ -866,10 +866,18 @@ body{display:flex;flex-direction:column}
 .fvp div{background:rgba(255,255,255,.94);color:#1c2333;border-radius:13px;padding:2px 8px;
   font:800 11px/1.5 Lato,sans-serif;letter-spacing:.02em;white-space:nowrap;text-align:center;
   box-shadow:0 1px 4px rgba(0,0,0,.3)}
+/* acima do veículo, o que ele é; abaixo, qual é ele */
+.fvt div{background:rgba(28,35,51,.82);color:#fff;border-radius:10px;padding:1px 7px;
+  font:800 8.8px/1.6 Lato,sans-serif;letter-spacing:.08em;white-space:nowrap;text-align:center;
+  text-transform:uppercase;box-shadow:0 1px 3px rgba(0,0,0,.35)}
+#mapa.longe .fvt{display:none}
 #mapa.longe .fvp{display:none}
-.lbl-un div{background:rgba(255,255,255,.55);color:#3d4663;border-radius:9px;padding:0 6px;
-  font:700 9.5px/1.7 Lato,sans-serif;white-space:nowrap;text-align:center;letter-spacing:.02em}
-/* os nomes das unidades são pano de fundo: só aparecem de perto, e discretos */
+/* As unidades da refinaria são pano de fundo, não informação principal:
+   nome em branco esmaecido, sem caixa e sem bolinha, com um fio de sombra
+   para continuar legível sobre o satélite. Só aparecem de perto. */
+.lbl-un div{color:rgba(255,255,255,.72);font:700 9.5px/1.6 Lato,sans-serif;white-space:nowrap;
+  text-align:center;letter-spacing:.04em;text-transform:uppercase;
+  text-shadow:0 1px 2px rgba(0,0,0,.85),0 0 6px rgba(0,0,0,.6);pointer-events:none}
 #mapa.longe .lbl-un,#mapa.medio .lbl-un{display:none}
 .leaflet-popup-content{margin:12px 14px;font-size:13px}
 .pop h4{margin:0 0 8px;font-size:15px;letter-spacing:.02em}
@@ -1093,7 +1101,7 @@ const EST = {
   semsinal: {cor:'#9aa3b8', nome:'sem comunicação'}
 };
 
-const NOME_TIPO = {picape:'picape', furgao:'furgão', van:'van', caminhao:'caminhão',
+const NOME_TIPO = {picape:'pickup', furgao:'furgão', van:'van', caminhao:'caminhão',
                    onibus:'ônibus', moto:'moto', carro:'carro'};
 const SIM = /(?:^|[?&])sim=1(?:&|$)/.test(location.search);
 const $ = id => document.getElementById(id);
@@ -1261,7 +1269,8 @@ function quadro(){
     const mk = MARCAS[v.id];
     if(mk && v.exibida){
       mk.setLatLng(v.exibida);
-      const et = mk._etiqueta; if(et) et.setLatLng(v.exibida);
+      if(mk._etiqueta) mk._etiqueta.setLatLng(v.exibida);
+      if(mk._tipoEt) mk._tipoEt.setLatLng(v.exibida);
       // gira só o ponteiro da borda: a silhueta do veículo fica de pé
       const ponteiro = mk._icon && mk._icon.querySelector('svg > g:first-child');
       if(ponteiro && v.estado === 'movendo')
@@ -1395,7 +1404,14 @@ function icone(v, selecionado){
 
 // Trocar o zoom muda o tamanho dos marcadores; isso obriga a refazê-los.
 function redesenharIcones(){
-  Object.keys(MARCAS).forEach(k => { MARCAS[k]._estado = null; });
+  // o tamanho do ícone mudou, e com ele a distância das etiquetas:
+  // é mais simples refazer os três do que remendar cada um
+  Object.keys(MARCAS).forEach(k => {
+    GRUPO.removeLayer(MARCAS[k]);
+    if(MARCAS[k]._etiqueta) GRUPO.removeLayer(MARCAS[k]._etiqueta);
+    if(MARCAS[k]._tipoEt) GRUPO.removeLayer(MARCAS[k]._tipoEt);
+    delete MARCAS[k];
+  });
   pintar();
 }
 
@@ -1410,9 +1426,13 @@ function pintar(){
       mk = L.marker(v.exibida || v.pos, {icon: icone(v, sel), zIndexOffset: 600});
       mk.on('click', ()=>selecionar(v.id, false));
       mk.addTo(GRUPO);
+      const meio = tamIcone() / 2;
       mk._etiqueta = L.marker(v.exibida || v.pos, {interactive:false, zIndexOffset:590,
-        icon: L.divIcon({className:'fvp', iconSize:[58,16], iconAnchor:[29,-17],
+        icon: L.divIcon({className:'fvp', iconSize:[60,18], iconAnchor:[30, -meio - 3],
           html:'<div>' + esc(v.placa) + '</div>'})}).addTo(GRUPO);
+      mk._tipoEt = L.marker(v.exibida || v.pos, {interactive:false, zIndexOffset:589,
+        icon: L.divIcon({className:'fvt', iconSize:[60,15], iconAnchor:[30, meio + 18],
+          html:'<div>' + esc(NOME_TIPO[v.tipo] || 'veículo') + '</div>'})}).addTo(GRUPO);
       MARCAS[v.id] = mk;
     }
     if(mk._estado !== v.estado + (sel?'+':'')){
@@ -1421,7 +1441,12 @@ function pintar(){
     mk.bindPopup(popup(v), {maxWidth:300});
   });
   Object.keys(MARCAS).forEach(id => {
-    if(!vistos[id]){ GRUPO.removeLayer(MARCAS[id]); GRUPO.removeLayer(MARCAS[id]._etiqueta); delete MARCAS[id]; }
+    if(!vistos[id]){
+      GRUPO.removeLayer(MARCAS[id]);
+      if(MARCAS[id]._etiqueta) GRUPO.removeLayer(MARCAS[id]._etiqueta);
+      if(MARCAS[id]._tipoEt) GRUPO.removeLayer(MARCAS[id]._tipoEt);
+      delete MARCAS[id];
+    }
   });
   renderTags(); renderLista(); trilhaPintar();
   $('vivo').classList.toggle('parado', !!ERRO);
@@ -1486,12 +1511,11 @@ function desenharAreas(){
   if(!AREAS_ON) return;
   AREAS.forEach(a => {
     if(a.poly){
-      L.polygon(a.poly, {color:'#fff', weight:1, opacity:.4, fillColor:'#6b5b95',
-        fillOpacity:.05, interactive:false}).addTo(GRUPO_AREAS);
-    } else if(a.ponto){
-      L.circleMarker(a.ponto, {radius:2.6, color:'#fff', weight:1, opacity:.45,
-        fillColor:'#6b5b95', fillOpacity:.3, interactive:false}).addTo(GRUPO_AREAS);
+      L.polygon(a.poly, {color:'#fff', weight:1, opacity:.28, fill:false,
+        interactive:false}).addTo(GRUPO_AREAS);
     }
+    // unidade marcada só com um ponto não ganha desenho nenhum: o nome basta,
+    // e dezenas de bolinhas brancas sobre o satélite só atrapalhavam
     const c = a.centro || a.ponto;
     if(c) L.marker(c, {interactive:false, zIndexOffset:200,
       icon: L.divIcon({className:'lbl-un', iconSize:[0,0],
