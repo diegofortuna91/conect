@@ -105,7 +105,26 @@ abrir e nunca guardado. Não existe transmissão ao vivo na API pública.
 
 **Alertas** aceitam no máximo 31 dias de janela e exigem `ruleId` ou
 `eventId`. **Quilometragem** exige a lista de veículos; o proxy busca
-sozinho quando a tela não manda.
+sozinho quando a tela não manda. **Obstrução de câmera** não aceita
+janela maior que **7 dias** — a tela olha os últimos sete e diz isso
+no quadro.
+
+**Relatórios que não servem:** `/herbie-1.1/stats/reports/out-of-work/`
+devolve uma **planilha .xlsx** mesmo com `Accept: application/json`. Por
+isso não há rota para "fora do horário": a tela calcula isso dos
+trechos. O endpoint de velocidade POR VEÍCULO existe e responde, mas
+devolve zero — o limite por veículo não está cadastrado nesta frota.
+
+**O que veio do painel da Cobli** (percorrido em 21/10/2026): o painel
+deles usa Google Maps, abre no mapa de ruas e alterna para satélite. Os
+indicadores que valeram a viagem e hoje estão no módulo: excesso de
+velocidade da via, km por evento, tempo em cada local de interesse,
+obstrução de câmera, rodando sem motorista e atividade fora do horário.
+Ficou de fora, de propósito: despesas e cartão de combustível (não são
+usados) e roteirização de entregas (não é o caso do contrato). Ficou
+pendente: **tratativas de ocorrência** — a Cobli tem o fluxo e nenhuma
+foi criada; é o que mais combina com a auditoria comportamental do SMS,
+e o lugar natural dele é o Firestore, não a Cobli.
 
 ### Como a frota está hoje
 

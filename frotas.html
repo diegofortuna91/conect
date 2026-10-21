@@ -1153,6 +1153,7 @@ body{display:flex;flex-direction:column}
     <button class="on" onclick="irPara('geral',this)">Visão geral</button>
     <button onclick="irPara('mapa',this)">Mapa ao vivo</button>
     <button onclick="irPara('desvios',this)">Desvios</button>
+    <button onclick="irPara('velocidade',this)">Velocidade</button>
     <button onclick="irPara('cameras',this)">Câmeras</button>
     <button onclick="irPara('motoristas',this)">Motoristas</button>
     <button onclick="irPara('custos',this)">Uso e custos</button>
@@ -1207,6 +1208,19 @@ body{display:flex;flex-direction:column}
   <div class="caixa"><div class="rolavel" id="desviosTab"></div></div>
 </div></section>
 
+<section class="pag" id="pg-velocidade"><div class="rolo">
+  <div class="cab"><div><h2>Excesso de velocidade</h2>
+    <p id="velSub">carregando…</p></div>
+    <div class="periodo" id="passoVel"></div></div>
+  <div class="kpis" id="velKpis"></div>
+  <div class="caixa" style="margin-bottom:13px"><h3>Excessos no tempo</h3>
+    <div class="sub" id="velSerieSub">quando aconteceram</div>
+    <div class="corpo2" id="velSerie"></div></div>
+  <div class="grade" id="velGrade"></div>
+  <div class="secao">Ocorrências</div>
+  <div class="caixa"><div class="rolavel" id="velTab"></div></div>
+</div></section>
+
 <section class="pag" id="pg-cameras"><div class="rolo">
   <div class="cab"><div><h2>Câmeras</h2>
     <p id="camSub">carregando…</p></div></div>
@@ -1248,7 +1262,13 @@ body{display:flex;flex-direction:column}
       <div class="sub">na ordem em que aconteceram</div>
       <div class="corpo2" id="itinLista"></div></div>
     <div class="caixa"><h3>Percurso</h3>
-      <div class="sub">o caminho percorrido, com as paradas na ordem do dia</div>
+      <div class="cab" style="padding:1px 15px 8px;margin:0">
+        <div class="sub" style="padding:0;flex:1">o caminho percorrido, com as paradas na ordem do dia</div>
+        <div class="seg" id="itinBase">
+          <button class="on" onclick="baseItin('sat',this)">🛰 Satélite</button>
+          <button onclick="baseItin('mapa',this)">🗺 Mapa</button>
+        </div>
+      </div>
       <div id="itinMapa" style="height:480px;border-radius:0 0 var(--r) var(--r)"></div></div>
   </div>
 </div></section>
@@ -1271,6 +1291,7 @@ body{display:flex;flex-direction:column}
         </div>
         <button class="bt on" id="btAreas" onclick="areasAlternar()">⬡ Unidades</button>
         <button class="bt" id="btTrilha" onclick="trilhaAlternar()">〰 Rastro</button>
+        <button class="bt" id="btCalor" onclick="calorAlternar()">◉ Desvios</button>
         <button class="bt" onclick="enquadrar()">⤢ Enquadrar</button>
       </div>
     </div>
@@ -1834,6 +1855,46 @@ function trilhaPonto(id, p){
   if(t.length > 40) t.shift();
 }
 
+/* Onde os desvios se repetem. Não é um mapa de calor de verdade — são
+   os próprios pontos, translúcidos e sobrepostos, o que para algumas
+   centenas de ocorrências mostra a concentração sem trazer biblioteca
+   nova para dentro de um arquivo que já precisa abrir sem internet. */
+let GRUPO_CALOR = null, CALOR_ON = false;
+
+function calorAlternar(){
+  CALOR_ON = !CALOR_ON;
+  $('btCalor').classList.toggle('on', CALOR_ON);
+  desenharCalor();
+}
+
+function desenharCalor(){
+  if(!MAPA) return;
+  if(!GRUPO_CALOR) GRUPO_CALOR = L.layerGroup().addTo(MAPA);
+  GRUPO_CALOR.clearLayers();
+  if(!CALOR_ON) return;
+
+  const pontos = [];
+  listaDesvios().forEach(x => {
+    if(x.location && x.location.latitude != null)
+      pontos.push({ p: [x.location.latitude, x.location.longitude], cor: '#c8412f' });
+  });
+  listaVelocidade().forEach(x => { if(x.pos) pontos.push({ p: x.pos, cor: '#e8963c' }); });
+
+  pontos.forEach(x => L.circleMarker(x.p, {
+    radius: 11, stroke: false, fillColor: x.cor, fillOpacity: .18, interactive: false
+  }).addTo(GRUPO_CALOR));
+
+  // o miolo, para o olho achar o centro da mancha
+  pontos.forEach(x => L.circleMarker(x.p, {
+    radius: 3, stroke: false, fillColor: x.cor, fillOpacity: .5, interactive: false
+  }).addTo(GRUPO_CALOR));
+
+  faixa(pontos.length
+    ? '<b>Concentração de desvios.</b> ' + num(pontos.length) +
+      ' ocorrência(s) no período filtrado — vermelho é condução, laranja é velocidade.'
+    : '<b>Sem desvios com posição</b> no período filtrado.');
+}
+
 function trilhaAlternar(){
   TRILHA_ON = !TRILHA_ON;
   $('btTrilha').classList.toggle('on', TRILHA_ON);
@@ -2130,14 +2191,14 @@ function mudarData(){
 function mudarRecorte(campo, valor){
   RECORTE[campo] = valor || '';
   pintarFiltros();
-  renderGeral(); renderDesvios(); renderMotoristas(); renderUso();
-  prepararItinerario(); renderCameras();
+  renderGeral(); renderDesvios(); renderVelocidade(); renderMotoristas(); renderUso();
+  prepararItinerario(); renderCameras(); desenharCalor();
 }
 
 function limparFiltros(){
   RECORTE.veiculo = RECORTE.motorista = RECORTE.tipo = RECORTE.unidade = '';
   montarFiltros();
-  renderGeral(); renderDesvios(); renderMotoristas(); renderUso();
+  renderGeral(); renderDesvios(); renderVelocidade(); renderMotoristas(); renderUso();
   prepararItinerario(); renderCameras();
 }
 
@@ -2318,7 +2379,8 @@ function condutoresDe(placa){
   });
   return Object.values(fora).sort((a, b) => b.minutos - a.minutos || b.vezes - a.vezes);
 }
-let PASSO_KM = 'dia', PASSO_DESVIO = 'dia', VEIC_FOCO = '', ITIN_VEIC = '', ITIN_DIA = '';
+let PASSO_KM = 'dia', PASSO_DESVIO = 'dia', PASSO_VEL = 'dia',
+    VEIC_FOCO = '', ITIN_VEIC = '', ITIN_DIA = '';
 let VEIC_USO = '';            // veículo aberto na aba de uso e custos
 
 /* Os endpoints /herbie-1.1/stats/* não aceitam data em ISO: querem o
@@ -2351,13 +2413,28 @@ async function carregarGestao(){
     pedir('motoristas', 'motoristas'),
     pedir('cadastro', 'veiculos'),
     pedir('condutores', 'condutores-do-veiculo', {inicio: ini, fim: fim}),
+    pedir('velocidade', 'velocidade-via', {inicio: ini, fim: fim, limite: 500}),
+    pedir('segvei', 'seguranca-veiculo', {inicio: ini, fim: fim}),
+    pedir('locais', 'locais-eventos', {inicio: ini, fim: fim}),
+    // A obstrução de câmera não aceita janela maior que 7 dias — este
+    // é o único indicador da tela que olha uma janela própria, e o
+    // cartão diz isso.
+    pedir('obstrucao', 'camera-obstruida', {inicio: ultimos7(ini, fim), fim: fim}),
     pedir('midias', 'midias', {inicio: ini, fim: fim, limite: 500}),
     carregarTrajetos(ini, fim)
   ]);
 
   montarFiltros();
-  renderGeral(); renderDesvios(); renderMotoristas(); renderUso();
+  renderGeral(); renderDesvios(); renderVelocidade(); renderMotoristas(); renderUso();
   prepararItinerario(); renderCameras();
+}
+
+/* A obstrução de câmera só aceita 7 dias. Quando o período é maior,
+   ela olha os últimos sete — e o cartão avisa. */
+function ultimos7(ini, fim){
+  const a = Date.parse(fim + 'T12:00:00') - 6 * 864e5;
+  const b = Date.parse(ini + 'T12:00:00');
+  return dia(Math.max(a, b));
 }
 
 /* Os trechos vêm paginados. Três páginas (1500 trechos) cobrem com folga
@@ -2401,6 +2478,65 @@ function listaMultas(){
 function listaTrechos(){
   return (Array.isArray(G.trajetos) ? G.trajetos : []).filter(passaTrecho);
 }
+
+/* Excesso em relação ao limite da via. O da Cobli vem com a velocidade
+   do carro e o limite do trecho, então o excesso é calculado aqui. */
+function listaVelocidade(){
+  return ((G.velocidade && G.velocidade.data) || [])
+    .map(x => ({
+      quando: x.event_time || '',
+      placa: String((x.vehicle || {}).license_plate || '').trim(),
+      grupo: grupoDe(x.vehicle),
+      motorista: (x.driver && x.driver.name) || '',
+      vel: x.speed_in_kmh || 0,
+      limite: x.speed_limit_in_kmh || 0,
+      excesso: Math.max(0, (x.speed_in_kmh || 0) - (x.speed_limit_in_kmh || 0)),
+      segundos: x.duration_above_speed_limit_in_seconds || 0,
+      gravidade: String(x.severity || '').toLowerCase(),
+      pos: x.location ? [x.location.latitude, x.location.longitude] : null
+    }))
+    .filter(v => casaVeiculo(v.placa) && casaMotorista(v.motorista)
+              && casaLugar({ group: v.grupo }, v.pos));
+}
+
+/* Segurança agregada por veículo: é daqui que sai o km por evento. */
+function linhasSeguranca(){
+  const d = (G.segvei && G.segvei.data) || {};
+  return (d.rows || []).filter(r =>
+    casaVeiculo(String((r.vehicle || {}).license_plate || '').trim()));
+}
+
+/* Entrada, saída e permanência em cada local de interesse da Cobli. */
+function listaLocais(){
+  const b = Array.isArray(G.locais) ? G.locais : ((G.locais && G.locais.data) || []);
+  return b.filter(x => casaVeiculo(String((x.vehicle || {}).license_plate || '').trim()));
+}
+
+function listaObstrucao(){
+  return ((G.obstrucao && G.obstrucao.data) || [])
+    .filter(o => casaVeiculo(String((o.vehicle || {}).license_plate || '').trim()));
+}
+
+/* Deslocamento fora da jornada. A Cobli tem o relatório, mas devolve
+   planilha; os trechos já trazem hora de início e fim, e a conta é
+   esta. Conta o trecho que começa ou termina fora da janela. */
+const JORNADA_INI = 7, JORNADA_FIM = 17;
+function foraDoHorario(){
+  let segundos = 0, trechos = 0;
+  const placas = new Set();
+  listaTrechos().forEach(x => {
+    if(!x.distance_in_meters) return;                 // parado não conta
+    const d = new Date(String((x.start_address || {}).date || '').replace(' ', 'T'));
+    if(isNaN(d)) return;
+    const h = d.getHours(), fds = d.getDay() === 0 || d.getDay() === 6;
+    if(!fds && h >= JORNADA_INI && h < JORNADA_FIM) return;
+    segundos += x.duration_in_seconds || 0;
+    trechos++;
+    const p = (x.vehicle || {}).license_plate;
+    if(p) placas.add(p);
+  });
+  return { minutos: segundos / 60, trechos, veiculos: placas.size };
+}
 function somaOcioso(c){ return listaOcioso().reduce((a,o) => a + (o[c] || 0), 0); }
 
 // A série diária da Cobli vem com a data em milissegundos na chave.
@@ -2427,6 +2563,26 @@ function renderGeral(){
   const graves = d.filter(x => DESVIO_GRAVE.includes(x.event_type)).length;
   const comSinal = VEICULOS.filter(v => v.estado !== 'semsinal').length;
   const nota = (G.ranking && G.ranking.data) ? G.ranking.data.average_fleet_score : null;
+
+  /* Quantos quilômetros a frota roda entre um desvio e outro. Vem da
+     segurança agregada: distância e eventos do mesmo período, somados
+     antes de dividir — média de médias mentiria a favor do carro que
+     rodou pouco. */
+  function kmPorEvento(){
+    const rs = linhasSeguranca();
+    if(!rs.length) return null;
+    const km2 = rs.reduce((a, r) => a + (r.driven_distance_in_kms || 0), 0);
+    const ev = rs.reduce((a, r) => a + Object.keys(r)
+      .filter(k => k.endsWith('_events_count'))
+      .reduce((s, k) => s + (r[k] || 0), 0), 0);
+    return ev ? km2 / ev : null;
+  }
+
+  // Veículo em movimento sem condutor identificado — o indicador que a
+  // Cobli mostra em "Rodando sem motorista".
+  function semMotorista(){
+    return VEICULOS.filter(x => x.estado === 'movendo' && !x.motorista);
+  }
   const valorMultas = mu.reduce((a,m) => a + (m.value_in_cents || 0), 0) / 100;
   const ligado = somaOcioso('total_engine_activity_in_minutes');
   const ocioso = somaOcioso('total_idle_in_minutes');
@@ -2446,7 +2602,16 @@ function renderGeral(){
       cls: mu.length ? 'alerta' : 'bom'},
     {r:'Nota de condução', v: nota != null ? nota : '—',
       s: (G.ranking && G.ranking.data) ? G.ranking.data.count + ' motorista(s)' : 'sem dados',
-      cls: nota != null && nota >= 70 ? 'bom' : (nota != null && nota < 40 ? 'alerta' : '')}
+      cls: nota != null && nota >= 70 ? 'bom' : (nota != null && nota < 40 ? 'alerta' : '')},
+    // Contagem bruta de desvio é injusta com quem roda mais. Este é o
+    // número que compara os veículos na mesma régua.
+    {r:'Km por desvio', v: kmPorEvento() != null ? num(kmPorEvento(), 1) + ' km' : '—',
+      s: 'quanto a frota roda entre um desvio e outro',
+      cls: kmPorEvento() != null && kmPorEvento() < 10 ? 'alerta' : ''},
+    {r:'Rodando sem motorista', v: num(semMotorista().length),
+      s: semMotorista().length ? semMotorista().map(v2 => v2.placa).join(', ')
+                               : 'todos identificados',
+      cls: semMotorista().length ? 'k-amber' : 'k-green'}
   ];
   $('kpis').innerHTML = cartoes.map(c =>
     '<div class="kpi ' + (c.cls || '') + '"><div class="r">' + c.r + '</div>' +
@@ -2581,6 +2746,7 @@ function passos(id, atual, aoTrocar){
 }
 function trocarPassoDesvio(p){ PASSO_DESVIO = p; renderDesvios(); }
 function trocarPassoKm(p){ PASSO_KM = p; renderUso(); }
+function trocarPassoVel(p){ PASSO_VEL = p; renderVelocidade(); }
 
 function renderDesvios(){
   const d = listaDesvios();
@@ -2616,6 +2782,8 @@ function renderDesvios(){
     caixa('Por motorista', 'clique para filtrar a tela por este motorista',
       barras(porMot, n => n, () => '#6b5b95',
         null, k => "recortar('motorista',\"" + k.replace(/"/g, '') + "\")")) +
+    caixa('Km entre desvios', 'quanto cada veículo roda entre uma ocorrência e outra',
+      rankingKmPorEvento()) +
     caixa('O que a Cobli pode detectar', 'tipos configurados nesta frota', catalogoDesvios(porTipo));
   renderDetalheVeiculo();
 
@@ -2647,6 +2815,126 @@ function renderDesvios(){
       num(ordenados.length) + ' — estreite o período ou use um recorte para ver o resto</div>' : '')
     : '<div class="carregando">' + (G.desvios_erro || 'Nenhum desvio no período.') + '</div>';
   animarBarras();
+}
+
+/* =====================================================================
+   VELOCIDADE
+
+   O excesso em relação ao limite DA VIA. A Cobli entrega cada evento
+   com a velocidade do carro, o limite do trecho e quanto tempo ficou
+   acima — e é isso que transforma "passou do limite" em "passou do
+   limite por 35 segundos, 14 km/h acima, na entrada da refinaria".
+   ===================================================================== */
+
+const GRAV_VEL = { high: 'grave', medium: 'moderado', low: 'leve' };
+const GRAV_VEL_COR = { high: '#c8412f', medium: '#e8963c', low: '#d9a521' };
+
+// Faixas de excesso: a conversa com o motorista muda conforme a faixa.
+function faixaExcesso(kmh){
+  if(kmh <= 5)  return 'até 5 km/h acima';
+  if(kmh <= 10) return '5 a 10 km/h acima';
+  if(kmh <= 20) return '10 a 20 km/h acima';
+  return 'mais de 20 km/h acima';
+}
+const FAIXA_COR = {
+  'até 5 km/h acima': '#8b94ad', '5 a 10 km/h acima': '#d9a521',
+  '10 a 20 km/h acima': '#e8963c', 'mais de 20 km/h acima': '#c8412f'
+};
+
+function renderVelocidade(){
+  const v = listaVelocidade();
+  $('passoVel').innerHTML = passos('passoVel', PASSO_VEL, 'trocarPassoVel');
+
+  if(G.velocidade_erro){ $('velSub').textContent = '⚠ ' + G.velocidade_erro; }
+  else $('velSub').textContent = v.length + ' excesso(s) · ' + rotuloFiltro();
+
+  const segundos = v.reduce((a, x) => a + x.segundos, 0);
+  const pior = v.reduce((a, x) => Math.max(a, x.excesso), 0);
+  const graves = v.filter(x => x.gravidade === 'high').length;
+
+  // Quanto do tempo dirigido foi acima do limite — a frota inteira.
+  const seg = linhasSeguranca();
+  const minutosDirigidos = seg.reduce((a, r) => a + (r.driven_time_in_minutes || 0), 0);
+  const pc = minutosDirigidos ? (segundos / 60) / minutosDirigidos * 100 : null;
+
+  $('velKpis').innerHTML = [
+    {r:'Excessos', v: num(v.length), s: 'sobre o limite da via',
+     cls: v.length ? 'alerta' : 'k-green'},
+    {r:'Tempo acima do limite', v: horas(segundos / 60),
+     s: pc != null ? num(pc, 2) + '% do tempo dirigido' : 'sem tempo de condução'},
+    {r:'Maior excesso', v: pior ? '+' + num(pior) + ' km/h' : '—',
+     s: 'acima do limite da via', cls: pior > 20 ? 'alerta' : ''},
+    {r:'Graves', v: num(graves),
+     s: v.length ? num(graves / v.length * 100, 0) + '% dos excessos' : 'nenhum',
+     cls: graves ? 'k-amber' : 'k-green'}
+  ].map(c => '<div class="kpi ' + (c.cls||'') + '"><div class="r">' + c.r + '</div>' +
+    '<div class="v">' + c.v + '</div><div class="s">' + c.s + '</div></div>').join('');
+
+  const porDia = {};
+  v.forEach(x => { const k = String(x.quando).slice(0,10); if(k) porDia[k] = (porDia[k]||0) + 1; });
+  $('velSerie').innerHTML = colunas(agrupar(porDia, PASSO_VEL), x => num(x), '#c8412f');
+  $('velSerieSub').textContent = PASSO_VEL === 'dia' ? 'excessos por dia'
+    : PASSO_VEL === 'semana' ? 'excessos por semana' : 'excessos por mês';
+
+  const porVeic = {}, porGrav = {}, porFaixa = {}, tempoPorVeic = {};
+  v.forEach(x => {
+    if(x.placa){ porVeic[x.placa] = (porVeic[x.placa]||0) + 1;
+                 tempoPorVeic[x.placa] = (tempoPorVeic[x.placa]||0) + x.segundos/60; }
+    if(x.gravidade) porGrav[x.gravidade] = (porGrav[x.gravidade]||0) + 1;
+    const f = faixaExcesso(x.excesso); porFaixa[f] = (porFaixa[f]||0) + 1;
+  });
+
+  $('velGrade').innerHTML =
+    caixa('Por veículo', 'clique para filtrar a tela por este veículo',
+      barras(porVeic, p => p, () => '#c8412f', null,
+        p => "recortar('veiculo','" + p + "')")) +
+    caixa('Por quanto passou', 'faixa de excesso sobre o limite',
+      barras(porFaixa, f => f, f => FAIXA_COR[f] || '#8b94ad')) +
+    caixa('Tempo acima do limite', 'minutos acumulados por veículo',
+      barras(tempoPorVeic, p => p, () => '#e8963c', x => horas(x))) +
+    caixa('Por gravidade', 'como a Cobli classificou',
+      barras(porGrav, g => GRAV_VEL[g] || g, g => GRAV_VEL_COR[g] || '#8b94ad'));
+
+  const linhas = v.slice().sort((a,b) => String(b.quando).localeCompare(String(a.quando))).slice(0, 500);
+  $('velTab').innerHTML = linhas.length ? '<table class="tbl"><thead><tr>' +
+    '<th>Quando</th><th>Veículo</th><th>Velocidade</th><th>Limite</th><th>Excesso</th>' +
+    '<th>Tempo acima</th><th>Unidade</th></tr></thead><tbody>' +
+    linhas.map(x => '<tr class="' + (x.pos ? 'clic' : '') + '"' +
+      (x.pos ? ' title="ver no mapa" onclick="verNoMapa(' + x.pos[0] + ',' + x.pos[1] + ')"' : '') + '>' +
+      '<td>' + esc(quando(x.quando)) + '</td>' +
+      '<td class="pl">' + esc(x.placa || '—') + '</td>' +
+      '<td><b>' + num(x.vel) + ' km/h</b></td>' +
+      '<td>' + num(x.limite) + ' km/h</td>' +
+      '<td><span class="marca" style="background:' + (FAIXA_COR[faixaExcesso(x.excesso)]) + '">+' +
+        num(x.excesso) + ' km/h</span></td>' +
+      '<td>' + (x.segundos >= 60 ? horas(x.segundos/60) : num(x.segundos) + ' s') + '</td>' +
+      '<td>' + esc(x.pos ? (unidadeDe(x.pos) || '—') : '—') + '</td></tr>').join('') +
+    '</tbody></table>'
+    : '<div class="carregando">' + (G.velocidade_erro ||
+      'Nenhum excesso de velocidade neste período.') + '</div>';
+  animarBarras();
+}
+
+/* O ranking que importa: quilômetros rodados entre um desvio e outro.
+   Quanto MENOR, pior — então a barra é invertida, senão o pior veículo
+   apareceria com a barra mais curta e passaria despercebido. */
+function rankingKmPorEvento(){
+  const rs = linhasSeguranca().filter(r => r.kms_per_event > 0);
+  if(!rs.length) return '<div class="carregando">' +
+    (G.segvei_erro ? '⚠ ' + G.segvei_erro : 'Sem dados de segurança agregada no período.') + '</div>';
+  const pior = Math.max(...rs.map(r => r.kms_per_event));
+  return rs.slice().sort((a,b) => a.kms_per_event - b.kms_per_event).map(r => {
+    const pl = String((r.vehicle || {}).license_plate || '—').trim();
+    const v = r.kms_per_event;
+    const larg = Math.max(4, (1 - v / pior) * 100);     // invertida: pior = barra cheia
+    const cor = v < 5 ? '#c8412f' : v < 15 ? '#e8963c' : '#7cb342';
+    return '<div class="meta-row clic" onclick="recortar(\'veiculo\',\'' + esc(pl) + '\')">' +
+      '<span class="who">' + esc(pl) +
+        '<small>' + num(r.driven_distance_in_kms) + ' km rodados</small></span>' +
+      '<span class="bar-track"><i class="bar-fill" data-w="' + larg.toFixed(1) +
+        '" style="background:' + cor + '"></i></span>' +
+      '<span class="pc">' + num(v, 1) + ' km</span></div>';
+  }).join('');
 }
 
 function catalogoDesvios(ocorridos){
@@ -2828,7 +3116,9 @@ function renderCameras(){
     caixa('Por ocorrência', 'o que a câmera flagrou',
       barras(porEvento, e => DESVIO_NOME[e] || String(e).toLowerCase().replace(/_/g,' '), DESVIO_COR)) +
     caixa('Por veículo', 'onde a câmera mais registrou',
-      barras(porVeic, p => p, () => '#3a4a9e'));
+      barras(porVeic, p => p, () => '#3a4a9e')) +
+    caixa('Câmera obstruída', 'os últimos 7 dias — a Cobli não dá janela maior',
+      obstrucaoCaixa());
 
   $('camLista').innerHTML = ms.length
     ? '<div class="mids">' + ms.map(cartaoMidia).join('') + '</div>'
@@ -2838,6 +3128,24 @@ function renderCameras(){
        'se o envio de mídia está liberado para esta chave.') + '</div></div>';
 
   animarBarras();
+}
+
+/* Lente tapada é o desvio que esconde todos os outros: enquanto a
+   câmera não enxerga, nada é registrado. A Cobli só aceita 7 dias de
+   janela nesta consulta, e o quadro diz isso. */
+function obstrucaoCaixa(){
+  const o = listaObstrucao();
+  if(!o.length) return '<div class="carregando">' +
+    (G.obstrucao_erro ? '⚠ ' + G.obstrucao_erro
+     : 'Sem leitura de obstrução nos últimos 7 dias.') + '</div>';
+  const mapa = {};
+  o.forEach(x => {
+    const pl = String((x.vehicle || {}).license_plate || '—').trim();
+    mapa[pl] = (x.obstructed_percentage || 0);
+  });
+  return barras(mapa, p => p,
+    p => mapa[p] > 5 ? '#c8412f' : mapa[p] > 1 ? '#e8963c' : '#7cb342',
+    v => num(v, 2) + '%');
 }
 
 function cartaoMidia(m){
@@ -3110,6 +3418,7 @@ function renderUso(){
   const jornadaVeic = uteis * JORNADA_H * 60;                       // minutos por veículo
   const jornada = jornadaVeic * Math.max(1, km.length);             // minutos da frota
   const porFatia = v => v / fat.n;
+  const fora = foraDoHorario();
 
   $('passoKm').innerHTML = passos('passoKm', PASSO_KM, 'trocarPassoKm');
   $('custoSub').textContent = rotuloFiltro() + ' · ' + km.length +
@@ -3135,7 +3444,13 @@ function renderUso(){
     {r:'Distância ' + fat.nome, v: num(porFatia(totalKm)) + ' km',
       s: num(totalKm) + ' km no período'},
     {r:'Combustível desperdiçado', v: num(litros, 1) + ' L', s: reais(custo) + ' com o motor parado',
-      cls: custo > 0 ? 'alerta' : ''}
+      cls: custo > 0 ? 'alerta' : ''},
+    // A Cobli tem este relatório, mas só em planilha; a conta sai dos
+    // trechos, contando deslocamento fora de 07h–17h e fim de semana.
+    {r:'Fora do horário', v: horas(fora.minutos),
+      s: fora.trechos ? fora.trechos + ' deslocamento(s) · ' + fora.veiculos + ' veículo(s)'
+                      : 'nada fora da jornada',
+      cls: fora.minutos > 60 ? 'alerta' : 'k-green'}
   ].map(c => '<div class="kpi ' + (c.cls||'') + '"><div class="r">' + c.r + '</div>' +
     '<div class="v">' + c.v + '</div><div class="s">' + c.s + '</div></div>').join('');
 
@@ -3155,6 +3470,8 @@ function renderUso(){
     caixa('Desperdício por veículo', 'reais queimados parado com o motor ligado',
       barras(oc.reduce((a,o) => { a[(o.vehicle&&o.vehicle.license_plate)||'—'] = o.fuel_costs||0; return a; }, {}),
         p => p, () => '#c8412f', v => reais(v))) +
+    caixa('Tempo nas unidades', 'permanência em cada local de interesse da Cobli',
+      tempoNasUnidades()) +
     caixa('Manutenção', 'situação na Cobli', manutencaoCaixa());
 
   const porPlaca = {};
@@ -3183,6 +3500,25 @@ function renderUso(){
     : '<div class="carregando">Sem dados de uso no período.</div>';
   renderDetalheUso();
   animarBarras();
+}
+
+/* Quanto tempo a frota passou em cada local de interesse. É a pergunta
+   que o mapa não responde: ele diz onde o carro está, não quanto tempo
+   ficou ali ao longo do mês. */
+function tempoNasUnidades(){
+  const ev = listaLocais();
+  if(!ev.length) return '<div class="carregando">' +
+    (G.locais_erro ? '⚠ ' + G.locais_erro
+     : 'Nenhuma entrada em local de interesse no período.') + '</div>';
+  const porLocal = {}, visitas = {};
+  ev.forEach(x => {
+    const nome = (x.geofence || {}).geofence_name || 'local sem nome';
+    porLocal[nome] = (porLocal[nome] || 0) + (x.duration_in_seconds || 0) / 60;
+    visitas[nome] = (visitas[nome] || 0) + 1;
+  });
+  return barras(porLocal,
+    nome => ({ nome: nome, sub: visitas[nome] + ' entrada(s)' }),
+    () => '#2f8f9e', v => horas(v));
 }
 
 function abrirUso(placa){
@@ -3313,6 +3649,17 @@ const hora = d => d ? String(d).slice(11,16) : '--:--';
    Guardado por veículo e dia: trocar de aba e voltar não refaz a
    consulta, e são mais de mil pontos por dia de trabalho. */
 const PERCURSOS = {};
+const CAMADAS_ITIN = {};
+let BASE_ITIN = 'sat';
+
+function baseItin(k, bt){
+  BASE_ITIN = k;
+  if(bt) [...bt.parentNode.children].forEach(b => b.classList.toggle('on', b === bt));
+  if(!MAPA_ITIN) return;
+  Object.values(CAMADAS_ITIN).forEach(c => MAPA_ITIN.removeLayer(c));
+  CAMADAS_ITIN[k].addTo(MAPA_ITIN);
+  CAMADAS_ITIN[k].bringToBack();
+}
 
 function aparelhoDe(placa){
   const t = listaTrechos().find(x => (x.vehicle||{}).license_plate === placa && x.device_id);
@@ -3397,8 +3744,11 @@ function desenharItinerario(t){
   if(typeof L === 'undefined') return;
   if(!MAPA_ITIN){
     MAPA_ITIN = L.map('itinMapa', {zoomControl:true});
-    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-      {maxZoom:19, attribution:'Imagens © Esri'}).addTo(MAPA_ITIN);
+    CAMADAS_ITIN.sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      {maxZoom:19, attribution:'Imagens © Esri'});
+    CAMADAS_ITIN.mapa = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      {maxZoom:19, attribution:'© OpenStreetMap'});
+    CAMADAS_ITIN[BASE_ITIN].addTo(MAPA_ITIN);
     GRUPO_ITIN = L.layerGroup().addTo(MAPA_ITIN);
     MAPA_ITIN.setView(CENTRO, 13);
   }
@@ -3652,8 +4002,71 @@ function painelSimulado(){
       latitude: d.location.latitude, longitude: d.location.longitude }
   })) };
 
+  // excesso de velocidade, no formato da Cobli
+  G.velocidade = { data: [] };
+  for(let i = 0; i < 48; i++){
+    const limite = [40, 60, 80][i % 3];
+    const excesso = 3 + (i * 7) % 28;
+    G.velocidade.data.push({
+      event_time: new Date(agora - (i * 5 + 2) * 36e5).toISOString().slice(0,19),
+      speed_in_kmh: limite + excesso,
+      speed_limit_in_kmh: limite,
+      duration_above_speed_limit_in_seconds: 8 + (i * 13) % 120,
+      severity: excesso > 20 ? 'high' : excesso > 10 ? 'medium' : 'low',
+      vehicle: { license_plate: placas[i % placas.length],
+                 group: { name: SIM_GRUPOS[i % 3] } },
+      driver: null,
+      location: { latitude: CENTRO[0] + ((i % 7) - 3) * 0.002,
+                  longitude: CENTRO[1] + ((i % 5) - 2) * 0.003 }
+    });
+  }
+
+  // segurança agregada: é daqui que sai o km por evento
+  G.segvei = { data: { count: placas.length, rows: placas.map((pl, i) => ({
+    vehicle: { license_plate: pl },
+    driven_distance_in_kms: 220 + (i * 137) % 800,
+    driven_time_in_minutes: 700 + (i * 91) % 1500,
+    distracted_driving_events_count: (i * 7) % 40,
+    tailgating_events_count: (i * 3) % 12,
+    hard_break_events_count: i % 5,
+    yawn_events_count: i % 7,
+    phone_usage_events_count: i % 3,
+    eyes_closed_events_count: 0, smoking_events_count: 0,
+    fast_acceleration_events_count: i % 4, speedy_turn_events_count: i % 6,
+    speed_events_count: 0, time_above_limit_percentage: 0,
+    driven_time_above_limit_in_minutes: 0,
+    kms_per_event: Math.round((220 + (i * 137) % 800) /
+      Math.max(1, (i * 7) % 40 + (i * 3) % 12 + i % 5 + i % 7) * 10) / 10
+  })) } };
+
+  // entradas e saídas em locais de interesse
+  const cercas = ['REFMAT', 'Pier 2', 'Oficina Central', 'Almoxarifado'];
+  G.locais = [];
+  for(let i = 0; i < 60; i++){
+    const t0 = agora - (i * 3 + 1) * 36e5;
+    const dur = 300 + (i * 97) % 5400;
+    G.locais.push({
+      geofence: { geofence_id: 'g' + (i % cercas.length), geofence_name: cercas[i % cercas.length],
+                  geofence_category: 'CLIENT' },
+      time_in: new Date(t0).toISOString().slice(0,19),
+      time_out: new Date(t0 + dur * 1000).toISOString().slice(0,19),
+      duration_in_seconds: dur,
+      vehicle: { license_plate: placas[i % placas.length] },
+      driver: null
+    });
+  }
+
+  // obstrução de câmera, só nos veículos que têm câmera
+  G.obstrucao = { data: placas.slice(0, 3).map((pl, i) => ({
+    vehicle: { license_plate: pl },
+    obstructed_percentage: Math.round((0.1 + i * 2.4) * 100) / 100,
+    total_obstructed_time_in_seconds: 120 + i * 600,
+    total_trip_time_in_seconds: 200000,
+    image_count: 1800 + i * 400
+  })) };
+
   montarFiltros();
-  renderGeral(); renderDesvios(); renderMotoristas(); renderUso();
+  renderGeral(); renderDesvios(); renderVelocidade(); renderMotoristas(); renderUso();
   prepararItinerario(); renderCameras();
 }
 
