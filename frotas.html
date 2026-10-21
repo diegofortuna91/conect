@@ -1257,6 +1257,7 @@ body{display:flex;flex-direction:column}
     <p id="itinSub">escolha o veículo e o dia</p></div>
     <div class="periodo" id="itinDias"></div></div>
   <div class="filtros" id="itinVeics" style="padding:0 0 12px"></div>
+  <div class="kpis" id="itinKpis"></div>
   <div class="grade" style="grid-template-columns:minmax(300px,1fr) minmax(360px,1.4fr)">
     <div class="caixa"><h3>Paradas e partidas</h3>
       <div class="sub">na ordem em que aconteceram</div>
@@ -3618,6 +3619,7 @@ function renderItinerario(){
     .sort((a,b) => (a.start_address.date || '').localeCompare(b.start_address.date || ''));
 
   const km = t.reduce((a,x) => a + (x.distance_in_meters || 0), 0) / 1000;
+  const dia2 = resumoDoDia(t);
   const motorista = (t.find(x => x.driver && x.driver.name) || {}).driver;
   const cond = condutoresDe(ITIN_VEIC);
   const quem = motorista ? motorista.name
@@ -3628,6 +3630,26 @@ function renderItinerario(){
     ? ITIN_VEIC + ' · ' + ITIN_DIA.split('-').reverse().join('/') + ' · ' + t.length +
       ' trecho(s) · ' + num(km,1) + ' km · ' + quem
     : 'sem trechos para este veículo neste dia';
+
+  $('itinKpis').innerHTML = t.length ? [
+    // O que ele pediu primeiro: quanto este carro ficou parado neste dia.
+    {r:'Tempo parado', v: horas(dia2.paradoMin),
+      s: dia2.jornadaMin ? num(dia2.paradoMin / dia2.jornadaMin * 100, 0) + '% do dia em campo'
+                         : dia2.paradas + ' parada(s)',
+      cls: dia2.jornadaMin && dia2.paradoMin / dia2.jornadaMin > .5 ? 'alerta' : 'k-amber'},
+    {r:'Em deslocamento', v: horas(dia2.rodandoMin),
+      s: num(km, 1) + ' km em ' + dia2.deslocamentos + ' trecho(s)'},
+    {r:'Motor ligado parado', v: horas(dia2.ociosoMin),
+      s: dia2.paradoMin ? num(dia2.ociosoMin / dia2.paradoMin * 100, 0) + '% do tempo parado'
+                        : 'sem registro',
+      cls: dia2.ociosoMin > 30 ? 'alerta' : ''},
+    {r:'Maior parada', v: horas(dia2.maiorMin),
+      s: dia2.maiorLocal ? esc(dia2.maiorLocal) : 'local não identificado'},
+    {r:'Em campo', v: dia2.inicio + ' → ' + dia2.fim,
+      s: horas(dia2.jornadaMin) + ' entre a primeira saída e a última chegada'},
+    {r:'Paradas', v: num(dia2.paradas), s: 'registradas no dia'}
+  ].map(c => '<div class="kpi ' + (c.cls||'') + '"><div class="r">' + c.r + '</div>' +
+    '<div class="v">' + c.v + '</div><div class="s">' + c.s + '</div></div>').join('') : '';
 
   $('itinLista').innerHTML = t.length ? t.map((x,i) => {
     const s = x.start_address || {}, e = x.end_address || {};
@@ -3864,6 +3886,41 @@ function desenharPercurso(g, trechos){
   });
 
   ajustarItin(coords);
+}
+
+/* Os números de um dia de um veículo, somados dos trechos.
+   "Parado" é o trecho sem distância; "ocioso" é o tempo que, dentro
+   dele, o motor ficou ligado — a Cobli manda esse pedaço em
+   idle_time_duration, e é a diferença entre o carro esperando e o
+   carro esperando gastando diesel. */
+function resumoDoDia(t){
+  let paradoSeg = 0, rodandoSeg = 0, ociosoSeg = 0, paradas = 0, deslocamentos = 0;
+  let maiorSeg = 0, maiorLocal = '';
+  t.forEach(x => {
+    const dur = x.duration_in_seconds || 0;
+    ociosoSeg += x.idle_time_duration || 0;
+    if(x.distance_in_meters){ rodandoSeg += dur; deslocamentos++; return; }
+    paradoSeg += dur; paradas++;
+    if(dur > maiorSeg){
+      maiorSeg = dur;
+      const e = x.end_address || {};
+      maiorLocal = x.geofence_name ||
+        (e.latitude != null ? unidadeDe([e.latitude, e.longitude]) : '') || '';
+    }
+  });
+  const primeiro = t[0] && (t[0].start_address || {}).date;
+  const ultimo = t.length && (t[t.length - 1].end_address || {}).date;
+  const jornadaSeg = (primeiro && ultimo)
+    ? Math.max(0, (Date.parse(String(ultimo).replace(' ', 'T')) -
+                   Date.parse(String(primeiro).replace(' ', 'T'))) / 1000)
+    : paradoSeg + rodandoSeg;
+  return {
+    paradoMin: paradoSeg / 60, rodandoMin: rodandoSeg / 60, ociosoMin: ociosoSeg / 60,
+    maiorMin: maiorSeg / 60, maiorLocal: maiorLocal,
+    paradas: paradas, deslocamentos: deslocamentos,
+    jornadaMin: jornadaSeg / 60,
+    inicio: primeiro ? hora(primeiro) : '—', fim: ultimo ? hora(ultimo) : '—'
+  };
 }
 
 function focarTrecho(i){
